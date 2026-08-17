@@ -336,3 +336,357 @@ body {
 .invite-form input[type="email"] {
   width: 260px;
 }
+
+/* ---------- Editor Layout ---------- */
+.ed-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin: -24px -28px;
+}
+.ed-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  z-index: 10;
+}
+.ed-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.ed-toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.ed-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.ed-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ed-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ed-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Window banner */
+.ed-window-banner {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.ed-window-open {
+  background: #14532d;
+  color: #86efac;
+}
+.ed-window-closed {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+/* Buttons */
+.ed-btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.ed-btn-open {
+  background: #16a34a;
+}
+.ed-btn-open:hover {
+  background: #22c55e;
+}
+.ed-btn-close {
+  background: #dc2626;
+}
+.ed-btn-close:hover {
+  background: #ef4444;
+}
+.ed-btn-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ed-btn-field:hover {
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+.ed-btn-field-active {
+  background: #78350f;
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+.ed-btn-publish {
+  background: #7e22ce;
+}
+.ed-btn-publish:hover {
+  background: #9333ea;
+}
+.ed-auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ed-auto-toggle input {
+  accent-color: var(--accent);
+}
+.ed-field-banner {
+  background: #78350f;
+  color: #fde68a;
+  font-size: 12px;
+  padding: 6px 16px;
+  text-align: center;
+}
+
+/* Map */
+.ed-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+.ed-map-wrap {
+  flex: 1;
+  min-height: 0;
+}
+.ed-map-wrap .maplibregl-map {
+  height: 100%;
+}
+
+/* Side Panel */
+.ed-panel {
+  width: 340px;
+  min-width: 340px;
+  background: var(--bg-soft);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.ed-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 0;
+}
+.ed-panel-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.ed-btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+.ed-btn-icon:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+.ed-panel-meta {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  flex-wrap: wrap;
+}
+.ed-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.ed-badge-status {
+  background: #1e3a8a;
+  color: #93c5fd;
+}
+.ed-badge-source {
+  background: #374151;
+  color: #d1d5db;
+}
+.ed-badge-region {
+  background: #14532d;
+  color: #86efac;
+}
+
+/* Form */
+.ed-form {
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ed-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ed-form-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ed-form-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+.ed-form-input:focus {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+.ed-form-input:disabled {
+  opacity: 0.5;
+}
+.ed-form-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+.ed-btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ed-btn-danger:hover {
+  background: #dc2626;
+}
+.ed-btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ed-form-locked {
+  color: var(--warn);
+  font-size: 13px;
+  margin: 0;
+  padding: 8px 0;
+}
+
+/* Popup */
+.ed-popup {
+  padding: 4px 0;
+  font-size: 13px;
+}
+.ed-popup-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+.ed-popup-key {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ed-popup-val {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Toast */
+.ed-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1000;
+  animation: toast-in 0.3s ease;
+}
+.ed-toast-ok {
+  background: #14532d;
+  color: #86efac;
+  border: 1px solid #22c55e;
+}
+.ed-toast-err {
+  background: #7f1d1d;
+  color: #fecaca;
+  border: 1px solid #ef4444;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* MapLibre overrides */
+.maplibregl-popup-content {
+  background: var(--bg-soft) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  color: var(--text) !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: var(--bg-soft) !important;
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: var(--bg-soft) !important;
+}
+.maplibregl-popup-close-button {
+  color: var(--text-muted) !important;
+  font-size: 16px !important;
+  padding: 0 4px !important;
+}
+.maplibregl-popup-close-button:hover {
+  color: var(--text) !important;
+}
+
+/* Terra Draw toolbar hide (we use custom buttons) */
+.maplibregl-ctrl-group.terra-draw-controls {
+  display: none !important;
+}

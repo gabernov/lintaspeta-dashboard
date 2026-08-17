@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useRef, useState, useCallback } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { TerraDraw, TerraDrawPointMode, TerraDrawLineStringMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
@@ -12,7 +12,6 @@ import type { EditWindow } from "../lib/types";
 import type {
   Feature,
   FeatureCollection,
-  GeoJsonProperties,
   Geometry,
   Point,
   LineString,
@@ -20,10 +19,12 @@ import type {
 
 const FIELD_COLOR = "#f59e0b";
 
+type GeoProps = Record<string, unknown>;
+
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const meta = getDataset(datasetId ?? "");
-  const { profile, role, region, hasRole } = useAuth();
+  const { profile, role, region } = useAuth();
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -52,7 +53,7 @@ export default function DatasetEditor() {
   const isSuperAdmin = role === "super_admin";
   const isEditor = role === "editor";
   const canDraw =
-    meta &&
+    meta != null &&
     (isSuperAdmin || (isEditor && (editWindow?.open || fieldMode)));
 
   const showToast = useCallback((msg: string, ok: boolean) => {
@@ -108,7 +109,7 @@ export default function DatasetEditor() {
   }, [editWindow, datasetId, profile?.id, showToast]);
 
   const handleSave = useCallback(
-    async (values: GeoJsonProperties) => {
+    async (values: GeoProps) => {
       if (!meta || !datasetId) return;
       setSaving(true);
 
@@ -136,7 +137,7 @@ export default function DatasetEditor() {
         ? String(selectedFeature.id)
         : null;
 
-      const { data, error } = await supabase.rpc("save_draft_feature", {
+      const { error } = await supabase.rpc("save_draft_feature", {
         p_dataset: datasetId,
         p_id: pId,
         p_source_id: sourceId,
@@ -195,7 +196,7 @@ export default function DatasetEditor() {
     if (!datasetId || !isSuperAdmin) return;
     if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`)) return;
     setPublishBusy(true);
-    const { data, error } = await supabase.rpc("publish_dataset_safe", {
+    const { data: _result, error } = await supabase.rpc("publish_dataset_safe", {
       p_dataset: datasetId,
     });
     setPublishBusy(false);
@@ -203,7 +204,7 @@ export default function DatasetEditor() {
       showToast("Gagal publish: " + error.message, false);
       return;
     }
-    const res = data as { published: number; dataset: string; at: string };
+    const res = _result as { published: number; dataset: string; at: string };
     showToast(`Berhasil publish ${res.published} fitur`, true);
   }, [datasetId, isSuperAdmin, meta?.label, showToast]);
 
@@ -244,7 +245,7 @@ export default function DatasetEditor() {
     map.on("load", () => {
       map.addSource("draft", {
         type: "geojson",
-        data: features,
+        data: { type: "FeatureCollection", features: [] },
       });
 
       if (isPoint) {
@@ -287,7 +288,8 @@ export default function DatasetEditor() {
       }
 
       const layerIds = isPoint ? ["draft-points"] : ["draft-lines"];
-      const buildPopupHtml = (props: GeoJsonProperties): string => {
+      const buildPopupHtml = (props: GeoProps | null): string => {
+        if (!props) return "";
         const rows: string[] = [];
         const fields = meta.formFields.slice(0, 5);
         for (const f of fields) {
@@ -312,12 +314,12 @@ export default function DatasetEditor() {
       };
 
       for (const lid of layerIds) {
-        map.on("click", lid, (e) => {
+        map.on("click", lid, (e: maplibregl.MapLayerMouseEvent) => {
           if (!e.features?.length) return;
           if (tdRef.current?.enabled) return;
 
-          const feat = e.features[0] as Feature;
-          const props = feat.properties as GeoJsonProperties;
+          const feat = e.features[0] as unknown as Feature;
+          const props = feat.properties as GeoProps | null;
           const coords =
             feat.geometry.type === "Point"
               ? (feat.geometry as Point).coordinates
@@ -339,8 +341,10 @@ export default function DatasetEditor() {
             }
           });
         });
+      }
 
-        map.on("mouseenter", () => {
+      for (const lid of layerIds) {
+        map.on("mouseenter", lid, () => {
           map.getCanvas().style.cursor = "pointer";
         });
         map.on("mouseleave", lid, () => {
@@ -348,12 +352,12 @@ export default function DatasetEditor() {
         });
       }
 
-      map.on("dblclick", (e) => {
+      map.on("dblclick", (e: maplibregl.MapMouseEvent) => {
         if (tdRef.current?.enabled) return;
         e.preventDefault();
       });
 
-      map.on("click", (e) => {
+      map.on("click", (e: maplibregl.MapMouseEvent) => {
         if (tdRef.current?.enabled) return;
         const clickedOnFeature = map.queryRenderedFeatures(e.point, {
           layers: layerIds,
@@ -424,10 +428,7 @@ export default function DatasetEditor() {
               !f.properties?.currentlyDrawing
           );
           if (drawn) {
-            const geom: Geometry = {
-              type: drawn.geometry.type as "Point" | "LineString",
-              coordinates: drawn.geometry.coordinates,
-            };
+            const geom = drawn.geometry as Point | LineString;
             setPendingGeometry(geom);
             setFormMode("create");
             setSelectedFeature(null);
@@ -475,7 +476,7 @@ export default function DatasetEditor() {
 
     void channel.track({ user: profile?.id ?? "anon" });
 
-    const presenceHandler = channel.on(
+    channel.on(
       "presence",
       { event: "sync" },
       () => {
@@ -521,7 +522,7 @@ export default function DatasetEditor() {
     const map = mapRef.current;
 
     const layerId = isPoint ? "draft-points" : "draft-lines";
-    const handler = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapboxGeoJSONFeature[] }) => {
+    const handler = (e: maplibregl.MapLayerMouseEvent) => {
       if (!e.features?.length) return;
       if (tdRef.current?.enabled) return;
       handleFeatureClick(e.features[0] as unknown as Feature);
@@ -531,7 +532,7 @@ export default function DatasetEditor() {
       map.on("click", layerId, handler);
     }
     return () => {
-      map.off("click", layerId, handler as (e: maplibregl.MapMouseEvent) => void);
+      map.off("click", layerId, handler);
     };
   }, [meta, isPoint, handleFeatureClick]);
 

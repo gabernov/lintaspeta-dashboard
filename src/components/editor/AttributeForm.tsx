@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import type { DatasetMeta } from "../../lib/types";
-import type { Feature, GeoJsonProperties } from "geojson";
+import type { Feature } from "geojson";
+
+type GeoProps = Record<string, unknown>;
 
 interface Props {
   meta: DatasetMeta;
@@ -8,7 +10,7 @@ interface Props {
   mode: "create" | "update";
   canEdit: boolean;
   canDelete: boolean;
-  onSave: (values: GeoJsonProperties) => void;
+  onSave: (values: GeoProps) => void;
   onDelete: () => void;
   onClose: () => void;
   saving: boolean;
@@ -25,22 +27,17 @@ export default function AttributeForm({
   onClose,
   saving,
 }: Props) {
-  const [values, setValues] = useState<GeoJsonProperties>({});
+  const [values, setValues] = useState<Record<string, string | number>>({});
 
   useEffect(() => {
-    if (mode === "update" && feature?.properties) {
-      const init: GeoJsonProperties = {};
-      for (const f of meta.formFields) {
-        init[f.key] = feature.properties[f.key] ?? "";
-      }
-      setValues(init);
-    } else {
-      const init: GeoJsonProperties = {};
-      for (const f of meta.formFields) {
-        init[f.key] = "";
-      }
-      setValues(init);
+    const init: Record<string, string | number> = {};
+    const src =
+      mode === "update" && feature?.properties ? feature.properties : {};
+    for (const f of meta.formFields) {
+      const v = src[f.key];
+      init[f.key] = v != null ? (typeof v === "number" ? v : String(v)) : "";
     }
+    setValues(init);
   }, [feature, mode, meta.formFields]);
 
   const handleChange = (key: string, val: string | number) => {
