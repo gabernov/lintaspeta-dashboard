@@ -66,12 +66,14 @@ def seed_points(portal, dataset, project_ref, db_password, limit=0, status="appr
     print(f"Inserting {n} rows...")
     BATCH = 1000
     inserted = 0
+    skipped = 0
     for start in range(0, n, BATCH):
         end = min(start + BATCH, n)
         batch = []
         for ki in keep_idx[start:end]:
             la = lat[ki]; lo = lon[ki]
-            if la is None or lo is None:
+            if la is None or lo is None or la < -10 or la > 6 or lo < 100 or lo > 120:
+                skipped += 1
                 continue
             sid = str(props_data.get(src_col, [None]*n)[ki] or f"{dataset}-{ki}")
             region = str(props_data.get(region_col, [None]*n)[ki] or "") if region_col else ""
