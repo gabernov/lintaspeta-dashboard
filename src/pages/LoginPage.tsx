@@ -41,19 +41,35 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-bg" aria-hidden="true">
+        <div className="login-bg-glow" />
+        <svg className="login-bg-grid" width="100%" height="100%">
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M40 0H0v40" fill="none" stroke="currentColor" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+      </div>
+
       <div className="login-card">
         <div className="login-brand">
-          <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true">
-            <path d="M12 2 4 6v12l8 4 8-4V6l-8-4zm0 2.2 5.5 2.7v10.2L12 19.8 6.5 17.1V6.9L12 4.2z" fill="currentColor" />
-            <circle cx="12" cy="12" r="2.6" fill="currentColor" />
-          </svg>
-          <h1>LintasPeta Dashboard</h1>
-          <p>Portal pengelolaan data peta Jabar</p>
+          <div className="login-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="36" height="36">
+              <path d="M12 2 4 6v12l8 4 8-4V6l-8-4z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+              <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+            </svg>
+          </div>
+          <h1>LintasPeta</h1>
+          <p className="login-tagline">Portal pengelolaan data peta Jawa Barat</p>
         </div>
 
+        <div className="login-divider" />
+
         <form onSubmit={handleSubmit} className="login-form">
-          <label>
-            Email
+          <label className="login-field">
+            <span>Email</span>
             <input
               type="email"
               required
@@ -61,37 +77,81 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="nama@dishubjabar.com"
               autoComplete="email"
+              className="login-input"
             />
           </label>
 
           {mode === "password" && (
-            <label>
-              Kata Sandi
+            <label className="login-field">
+              <span>Kata Sandi</span>
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
+                className="login-input"
+                placeholder="••••••••"
               />
             </label>
           )}
 
-          {error && <p className="form-error">{error}</p>}
-          {info && <p className="form-info">{info}</p>}
+          {error && (
+            <div className="login-alert login-alert-error">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12" y2="16" />
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
+          {info && (
+            <div className="login-alert login-alert-info">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="8" />
+              </svg>
+              <span>{info}</span>
+            </div>
+          )}
 
-          <button type="submit" disabled={busy} className="btn-primary">
-            {busy ? "Memproses…" : mode === "password" ? "Masuk" : "Kirim Tautan"}
+          <button type="submit" disabled={busy} className="login-submit">
+            {busy ? (
+              <>
+                <span className="login-spinner" />
+                Memproses…
+              </>
+            ) : mode === "password" ? (
+              "Masuk"
+            ) : (
+              "Kirim Tautan"
+            )}
           </button>
 
           <button
             type="button"
-            className="btn-link"
+            className="login-toggle"
             onClick={() => setMode(mode === "password" ? "magic" : "password")}
           >
-            {mode === "password" ? "Gunakan tautan email (magic link)" : "Gunakan kata sandi"}
+            {mode === "password" ? (
+              <>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16v16H4z" />
+                  <polyline points="22 6 12 13 2 6" />
+                </svg>
+                Kirim tautan email (magic link)
+              </>
+            ) : (
+              "Gunakan kata sandi"
+            )}
           </button>
         </form>
+
+        <div className="login-footer">
+          <span className="muted">Dinas Perhubungan Provinsi Jawa Barat</span>
+        </div>
       </div>
     </div>
   );
