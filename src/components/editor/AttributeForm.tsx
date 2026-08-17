@@ -1,0 +1,148 @@
+import { useState, useEffect } from "react";
+import type { DatasetMeta } from "../../lib/types";
+import type { Feature, GeoJsonProperties } from "geojson";
+
+interface Props {
+  meta: DatasetMeta;
+  feature: Feature | null;
+  mode: "create" | "update";
+  canEdit: boolean;
+  canDelete: boolean;
+  onSave: (values: GeoJsonProperties) => void;
+  onDelete: () => void;
+  onClose: () => void;
+  saving: boolean;
+}
+
+export default function AttributeForm({
+  meta,
+  feature,
+  mode,
+  canEdit,
+  canDelete,
+  onSave,
+  onDelete,
+  onClose,
+  saving,
+}: Props) {
+  const [values, setValues] = useState<GeoJsonProperties>({});
+
+  useEffect(() => {
+    if (mode === "update" && feature?.properties) {
+      const init: GeoJsonProperties = {};
+      for (const f of meta.formFields) {
+        init[f.key] = feature.properties[f.key] ?? "";
+      }
+      setValues(init);
+    } else {
+      const init: GeoJsonProperties = {};
+      for (const f of meta.formFields) {
+        init[f.key] = "";
+      }
+      setValues(init);
+    }
+  }, [feature, mode, meta.formFields]);
+
+  const handleChange = (key: string, val: string | number) => {
+    setValues((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(values);
+  };
+
+  return (
+    <div className="ed-panel">
+      <div className="ed-panel-header">
+        <h3>{mode === "create" ? "Tambah Fitur Baru" : "Edit Fitur"}</h3>
+        <button className="ed-btn-icon" onClick={onClose} title="Tutup panel">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {mode === "update" && feature?.properties && (
+        <div className="ed-panel-meta">
+          <span className="ed-badge ed-badge-status">
+            {String(feature.properties._status ?? "draft")}
+          </span>
+          <span className="ed-badge ed-badge-source">
+            {String(feature.properties._source_type ?? "master")}
+          </span>
+          {feature.properties._region && (
+            <span className="ed-badge ed-badge-region">
+              {String(feature.properties._region)}
+            </span>
+          )}
+        </div>
+      )}
+
+      <form className="ed-form" onSubmit={handleSubmit}>
+        {meta.formFields.map((field) => (
+          <label key={field.key} className="ed-form-field">
+            <span className="ed-form-label">{field.label}</span>
+            {field.type === "select" && field.options ? (
+              <select
+                className="ed-form-input"
+                value={String(values[field.key] ?? "")}
+                onChange={(e) => handleChange(field.key, e.target.value)}
+                disabled={!canEdit}
+              >
+                <option value="">— Pilih —</option>
+                {field.options.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            ) : field.type === "number" ? (
+              <input
+                type="number"
+                step="any"
+                className="ed-form-input"
+                value={values[field.key] != null ? String(values[field.key]) : ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  handleChange(field.key, v === "" ? "" : Number(v));
+                }}
+                disabled={!canEdit}
+              />
+            ) : (
+              <input
+                type="text"
+                className="ed-form-input"
+                value={String(values[field.key] ?? "")}
+                onChange={(e) => handleChange(field.key, e.target.value)}
+                disabled={!canEdit}
+              />
+            )}
+          </label>
+        ))}
+
+        <div className="ed-form-actions">
+          {canEdit && (
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? "Menyimpan…" : "Simpan"}
+            </button>
+          )}
+          {canDelete && mode === "update" && (
+            <button
+              type="button"
+              className="ed-btn-danger"
+              onClick={onDelete}
+              disabled={saving}
+            >
+              Hapus
+            </button>
+          )}
+        </div>
+
+        {!canEdit && (
+          <p className="ed-form-locked">
+            Jendela edit tertutup — hubungi super admin.
+          </p>
+        )}
+      </form>
+    </div>
+  );
+}
