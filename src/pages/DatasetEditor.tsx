@@ -21,16 +21,83 @@ const FIELD_COLOR = "#f59e0b";
 
 type GeoProps = Record<string, unknown>;
 
+/* ------------------------------------------------------------------ */
+/*  Geometry helpers – compute a bounding box for a FeatureCollection  */
+/* ------------------------------------------------------------------ */
+function computeBBox(
+  fc: FeatureCollection
+): [number, number, number, number] | null {
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+
+  const proc = (lng: number, lat: number) => {
+    if (lng < minLng) minLng = lng;
+    if (lat < minLat) minLat = lat;
+    if (lng > maxLng) maxLng = lng;
+    if (lat > maxLat) maxLat = lat;
+  };
+
+  for (const feat of fc.features) {
+    const g = feat.geometry;
+    switch (g.type) {
+      case "Point":
+        proc(g.coordinates[0], g.coordinates[1]);
+        break;
+      case "LineString":
+        for (const c of g.coordinates) proc(c[0], c[1]);
+        break;
+      case "Polygon":
+        for (const ring of g.coordinates)
+          for (const c of ring) proc(c[0], c[1]);
+        break;
+      case "MultiPoint":
+        for (const c of g.coordinates) proc(c[0], c[1]);
+        break;
+      case "MultiLineString":
+        for (const part of g.coordinates)
+          for (const c of part) proc(c[0], c[1]);
+        break;
+      case "MultiPolygon":
+        for (const poly of g.coordinates)
+          for (const ring of poly)
+            for (const c of ring) proc(c[0], c[1]);
+        break;
+      case "GeometryCollection":
+        for (const sub of g.geometries) {
+          const mini: FeatureCollection = {
+            type: "FeatureCollection",
+            features: [{ type: "Feature", geometry: sub, properties: {} }],
+          };
+          const subB = computeBBox(mini);
+          if (subB) {
+            proc(subB[0], subB[1]);
+            proc(subB[2], subB[3]);
+          }
+        }
+        break;
+    }
+  }
+
+  if (minLng === Infinity) return null;
+  return [minLng, minLat, maxLng, maxLat];
+}
+
+/* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const meta = getDataset(datasetId ?? "");
   const { profile, role, region } = useAuth();
 
+  /* ---- refs ---- */
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const tdRef = useRef<TerraDraw | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const hasFittedRef = useRef(false);
 
+  /* ---- state ---- */
   const [features, setFeatures] = useState<FeatureCollection>({
     type: "FeatureCollection",
     features: [],
@@ -48,7 +115,9 @@ export default function DatasetEditor() {
   const [autoSchedule, setAutoSchedule] = useState(() => {
     return localStorage.getItem(`autoflag_${datasetId}`) === "true";
   });
+  const [initialLoading, setInitialLoading] = useState(true);
 
+  /* ---- derived ---- */
   const isPoint = meta?.geometryType === "Point";
   const isSuperAdmin = role === "super_admin";
   const isEditor = role === "editor";
@@ -56,10 +125,19 @@ export default function DatasetEditor() {
     meta != null &&
     (isSuperAdmin || (isEditor && (editWindow?.open || fieldMode)));
 
+  /* ---- callbacks ---- */
   const showToast = useCallback((msg: string, ok: boolean) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 4000);
   }, []);
+
+  /** Shared draw-start handler used by both toolbar and floating toolbox. */
+  const handleStartDraw = useCallback(() => {
+    if (tdRef.current) {
+      tdRef.current.clear();
+      tdRef.current.setMode(isPoint ? "point" : "linestring");
+    }
+  }, [isPoint]);
 
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
@@ -68,14 +146,34 @@ export default function DatasetEditor() {
     });
     if (error) {
       console.error("fetch features:", error.message);
+      setInitialLoading(false);
       return;
     }
     const fc = data as FeatureCollection;
     setFeatures(fc);
+    setInitialLoading(false);
+
     if (mapRef.current?.isStyleLoaded()) {
       const src = mapRef.current.getSource("draft");
       if (src && "setData" in src) {
         (src as maplibregl.GeoJSONSource).setData(fc);
+      }
+
+      /* fit-bounds once on first load so data fills the viewport */
+      if (!hasFittedRef.current) {
+        const bbox = computeBBox(fc);
+        if (bbox) {
+          mapRef.current.fitBounds(bbox, { padding: 60, maxZoom: 14 });
+        } else {
+          mapRef.current.fitBounds(
+            [
+              [105.5, -8],
+              [109.5, -5.5],
+            ],
+            { padding: 60 }
+          );
+        }
+        hasFittedRef.current = true;
       }
     }
   }, [datasetId]);
@@ -95,7 +193,11 @@ export default function DatasetEditor() {
     const next = !editWindow.open;
     const { error } = await supabase
       .from("edit_windows")
-      .update({ open: next, opened_by: profile?.id, opened_at: new Date().toISOString() })
+      .update({
+        open: next,
+        opened_by: profile?.id,
+        opened_at: new Date().toISOString(),
+      })
       .eq("dataset", datasetId);
     if (error) {
       showToast("Gagal mengubah jendela edit: " + error.message, false);
@@ -124,18 +226,19 @@ export default function DatasetEditor() {
       }
 
       const regionVal =
-        values[meta.regionPropertyKey ?? ""] ??
-        region ??
-        "";
+        values[meta.regionPropertyKey ?? ""] ?? region ?? "";
 
       const sourceId =
         formMode === "create"
           ? `new-${Date.now()}`
-          : String(selectedFeature?.properties?._source_id ?? `new-${Date.now()}`);
+          : String(
+              selectedFeature?.properties?._source_id ?? `new-${Date.now()}`
+            );
 
-      const pId = formMode === "update" && selectedFeature?.id
-        ? String(selectedFeature.id)
-        : null;
+      const pId =
+        formMode === "update" && selectedFeature?.id
+          ? String(selectedFeature.id)
+          : null;
 
       const { error } = await supabase.rpc("save_draft_feature", {
         p_dataset: datasetId,
@@ -152,7 +255,10 @@ export default function DatasetEditor() {
         showToast("Gagal menyimpan: " + error.message, false);
         return;
       }
-      showToast(formMode === "create" ? "Fitur ditambahkan" : "Fitur diperbarui", true);
+      showToast(
+        formMode === "create" ? "Fitur ditambahkan" : "Fitur diperbarui",
+        true
+      );
       setFormOpen(false);
       setSelectedFeature(null);
       setPendingGeometry(null);
@@ -194,11 +300,13 @@ export default function DatasetEditor() {
 
   const handlePublish = useCallback(async () => {
     if (!datasetId || !isSuperAdmin) return;
-    if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`)) return;
+    if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`))
+      return;
     setPublishBusy(true);
-    const { data: _result, error } = await supabase.rpc("publish_dataset_safe", {
-      p_dataset: datasetId,
-    });
+    const { data: _result, error } = await supabase.rpc(
+      "publish_dataset_safe",
+      { p_dataset: datasetId }
+    );
     setPublishBusy(false);
     if (error) {
       showToast("Gagal publish: " + error.message, false);
@@ -221,20 +329,39 @@ export default function DatasetEditor() {
     popupRef.current = null;
   }, []);
 
+  /* ---- map init ---- */
   useEffect(() => {
     if (!mapContainerRef.current || !meta) return;
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
-      center: [119.8, -2.5],
-      zoom: 10,
+      style: {
+        version: 8,
+        sources: {
+          basemap: {
+            type: "raster",
+            tiles: [
+              "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+            ],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors © CARTO",
+          },
+        },
+        layers: [
+          {
+            id: "basemap",
+            type: "raster",
+            source: "basemap",
+            minzoom: 0,
+            maxzoom: 20,
+          },
+        ],
+      },
+      center: [107.6, -6.9],
+      zoom: 9,
     });
 
     mapRef.current = map;
-
-    map.addControl(new maplibregl.NavigationControl(), "top-left");
-    map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
 
     popupRef.current = new maplibregl.Popup({
       closeButton: true,
@@ -258,8 +385,8 @@ export default function DatasetEditor() {
             "circle-radius": [
               "case",
               ["==", ["get", "_source_type"], "field"],
-              8,
-              6,
+              10,
+              7,
             ],
             "circle-color": [
               "case",
@@ -267,8 +394,19 @@ export default function DatasetEditor() {
               FIELD_COLOR,
               meta.defaultColor,
             ],
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#1e293b",
+            "circle-stroke-width": [
+              "case",
+              ["==", ["get", "_source_type"], "field"],
+              3,
+              2,
+            ],
+            "circle-stroke-color": [
+              "case",
+              ["==", ["get", "_source_type"], "field"],
+              "#92400e",
+              "#0f172a",
+            ],
+            "circle-blur": 0.15,
           },
         });
       } else {
@@ -276,6 +414,10 @@ export default function DatasetEditor() {
           id: "draft-lines",
           type: "line",
           source: "draft",
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+          },
           paint: {
             "line-color": [
               "case",
@@ -283,7 +425,7 @@ export default function DatasetEditor() {
               FIELD_COLOR,
               meta.defaultColor,
             ],
-            "line-width": 2.5,
+            "line-width": 3,
           },
         });
       }
@@ -401,34 +543,33 @@ export default function DatasetEditor() {
       }
       const adapter = new TerraDrawMapLibreGLAdapter({ map });
 
-        const modes = isPoint
-          ? [new TerraDrawPointMode()]
-          : [new TerraDrawLineStringMode()];
+      const modes = isPoint
+        ? [new TerraDrawPointMode()]
+        : [new TerraDrawLineStringMode()];
 
-        const td = new TerraDraw({ adapter, modes });
-        td.start();
-        tdRef.current = td;
-        td.setMode(canDraw ? (isPoint ? "point" : "linestring") : "static");
+      const td = new TerraDraw({ adapter, modes });
+      td.start();
+      tdRef.current = td;
+      td.setMode(canDraw ? (isPoint ? "point" : "linestring") : "static");
 
-        td.on("finish", (_id, context) => {
-            if (context.action === "draw") {
-            const snap = td.getSnapshot();
-            const drawn = snap.find(
-              (f) =>
-                f.properties?.mode === (isPoint ? "point" : "linestring") &&
-                !f.properties?.currentlyDrawing
-            );
-            if (drawn) {
-              const geom = drawn.geometry as Point | LineString;
-              setPendingGeometry(geom);
-              setFormMode("create");
-              setSelectedFeature(null);
-              setFormOpen(true);
-            }
-            td.clear();
+      td.on("finish", (_id, context) => {
+        if (context.action === "draw") {
+          const snap = td.getSnapshot();
+          const drawn = snap.find(
+            (f) =>
+              f.properties?.mode === (isPoint ? "point" : "linestring") &&
+              !f.properties?.currentlyDrawing
+          );
+          if (drawn) {
+            const geom = drawn.geometry as Point | LineString;
+            setPendingGeometry(geom);
+            setFormMode("create");
+            setSelectedFeature(null);
+            setFormOpen(true);
           }
-        });
-
+          td.clear();
+        }
+      });
     }
 
     return () => {
@@ -440,23 +581,24 @@ export default function DatasetEditor() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ---- sync terra-draw mode with canDraw ---- */
   useEffect(() => {
     if (tdRef.current && meta) {
       if (canDraw) {
-        tdRef.current.setMode(
-          isPoint ? "point" : "linestring"
-        );
+        tdRef.current.setMode(isPoint ? "point" : "linestring");
       } else {
         tdRef.current.setMode("static");
       }
     }
   }, [canDraw, meta, isPoint]);
 
+  /* ---- initial data fetch ---- */
   useEffect(() => {
     void refreshFeatures();
     void refreshEditWindow();
   }, [refreshFeatures, refreshEditWindow]);
 
+  /* ---- realtime channel ---- */
   useEffect(() => {
     if (!datasetId || !meta) return;
     const channel = supabase
@@ -487,6 +629,7 @@ export default function DatasetEditor() {
     };
   }, [datasetId, meta, profile?.id, refreshFeatures]);
 
+  /* ---- keep selected feature in sync with live data ---- */
   useEffect(() => {
     if (formMode === "update" && selectedFeature) {
       const id = String(selectedFeature.id);
@@ -531,99 +674,250 @@ export default function DatasetEditor() {
     };
   }, [meta, isPoint, handleFeatureClick]);
 
+  /* ================================================================ */
+  /*  RENDER                                                          */
+  /* ================================================================ */
   if (!meta) {
     return <div className="page-loading">Dataset tidak dikenal</div>;
   }
 
   return (
     <div className="ed-root">
-      <div className="ed-toolbar">
-        <div className="ed-toolbar-left">
-          <h2 className="ed-title">{meta.label}</h2>
-          <span className="ed-online">
-            <span className="ed-live-dot" />
-            {onlineCount} online
-          </span>
-        </div>
+      
 
-        <div className="ed-toolbar-center">
-          <div
-            className={`ed-window-banner ${editWindow?.open ? "ed-window-open" : "ed-window-closed"}`}
-          >
-            {editWindow?.open
-              ? "Jendela edit TERBUKA"
-              : "Jendela edit TERTUTUP"}
-          </div>
-          {isSuperAdmin && (
-            <button
-              className={`btn-primary ed-btn-sm ${editWindow?.open ? "ed-btn-close" : "ed-btn-open"}`}
-              onClick={toggleWindow}
-            >
-              {editWindow?.open ? "Tutup Jendela" : "Buka Jendela"}
-            </button>
-          )}
-        </div>
-
-        <div className="ed-toolbar-right">
-          {(isSuperAdmin || isEditor) && (
-            <button
-              className={`ed-btn-field ${fieldMode ? "ed-btn-field-active" : ""}`}
-              onClick={() => setFieldMode((p) => !p)}
-              title="Mode Penandaan Lapangan"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
-                <circle cx="12" cy="9" r="2.5" />
-              </svg>
-              {fieldMode ? "Mode Lapangan ON" : "Mode Penandaan"}
-            </button>
-          )}
-
-          {isSuperAdmin && (
-            <>
-              <label className="ed-auto-toggle">
-                <input
-                  type="checkbox"
-                  checked={autoSchedule}
-                  onChange={toggleAutoSchedule}
-                />
-                Auto 2 hari
-              </label>
-              <button
-                className="btn-primary ed-btn-sm ed-btn-publish"
-                onClick={handlePublish}
-                disabled={publishBusy}
-              >
-                {publishBusy ? "Publishing…" : "Publish ke Peta Publik"}
-              </button>
-            </>
-          )}
-
-          {canDraw && (
-            <button
-              className="btn-primary ed-btn-sm"
-              onClick={() => {
-                if (tdRef.current) {
-                  tdRef.current.clear();
-                  tdRef.current.setMode(isPoint ? "point" : "linestring");
-                }
-              }}
-            >
-              {isPoint ? "+ Titik" : "+ Garis"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {fieldMode && (
-        <div className="ed-field-banner">
-          Mode Penandaan Lapangan aktif — fitur baru langsung tampil untuk
-          editor, masuk daftar publish berikutnya.
-        </div>
-      )}
-
+      {/* -------- map + overlays -------- */}
       <div className="ed-body">
-        <div className="ed-map-wrap" ref={mapContainerRef} />
+        <div className="ed-map-wrap" ref={mapContainerRef}>
+        {/* ---- Top-left floating panel: title, online, edit window ---- */}
+        <div className="ed-panel-tl">
+          <div className="ed-panel-tl-title">{meta.label}</div>
+          <div className="ed-panel-tl-sub">
+            <span className="ed-live-dot" />
+            <span>{onlineCount} online</span>
+            <div className={`ed-window-pill ${editWindow?.open ? "ed-window-pill-open" : "ed-window-pill-closed"}`}>
+              {editWindow?.open ? "Edit terbuka" : "Edit tertutup"}
+            </div>
+            {isSuperAdmin && (
+              <button
+                className={`ed-window-btn ${editWindow?.open ? "ed-window-btn-close" : "ed-window-btn-open"}`}
+                onClick={toggleWindow}
+              >
+                {editWindow?.open ? "Tutup" : "Buka"}
+              </button>
+            )}
+          </div>
+        </div>
+
+          {/* ---- Floating Toolbox ---- */}
+          {(isSuperAdmin || isEditor) && (
+            <div className="ed-toolbox">
+              {canDraw && (
+                <button
+                  className="ed-toolbox-btn"
+                  onClick={handleStartDraw}
+                  title={isPoint ? "+ Titik" : "+ Garis"}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              )}
+
+              <button
+                className={`ed-toolbox-btn${fieldMode ? " ed-toolbox-btn-active" : ""}`}
+                onClick={() => setFieldMode((p) => !p)}
+                title="Mode Penandaan"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
+                  <circle cx="12" cy="9" r="2.5" />
+                </svg>
+              </button>
+
+              {isSuperAdmin && (
+                <>
+                <button
+                  className="ed-toolbox-btn"
+                  onClick={toggleAutoSchedule}
+                  title={`Auto publish 2 hari: ${autoSchedule ? "ON" : "OFF"}`}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </button>
+                <button
+                  className="ed-toolbox-btn ed-toolbox-btn-publish"
+                  onClick={handlePublish}
+                  disabled={publishBusy}
+                  title="Publish ke Peta Publik"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                </button>
+                </>
+              )}
+
+              <div className="ed-toolbox-divider" />
+
+              <button
+                className="ed-toolbox-btn"
+                onClick={() => {
+                  const m = mapRef.current;
+                  if (m) m.easeTo({ zoom: m.getZoom() + 1, duration: 200 });
+                }}
+                title="Perbesar"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+
+              <button
+                className="ed-toolbox-btn"
+                onClick={() => {
+                  const m = mapRef.current;
+                  if (m) m.easeTo({ zoom: m.getZoom() - 1, duration: 200 });
+                }}
+                title="Perkecil"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+              <button
+                className="ed-toolbox-btn"
+                onClick={() => {
+                  const m = mapRef.current;
+                  if (m) m.easeTo({ center: [107.6, -6.9], zoom: 9, duration: 400 });
+                }}
+                title="Reset ke Jawa Barat"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* ---- Legend ---- */}
+          <div className="ed-legend">
+            <div className="ed-legend-item">
+              {isPoint ? (
+                <span
+                  className="ed-legend-swatch"
+                  style={{ backgroundColor: meta.defaultColor }}
+                />
+              ) : (
+                <span
+                  className="ed-legend-swatch-line"
+                  style={{ backgroundColor: meta.defaultColor }}
+                />
+              )}
+              <span className="ed-legend-label">Fitur (master)</span>
+            </div>
+            <div className="ed-legend-item">
+              {isPoint ? (
+                <span
+                  className="ed-legend-swatch ed-legend-swatch-field"
+                  style={{ backgroundColor: FIELD_COLOR }}
+                />
+              ) : (
+                <span
+                  className="ed-legend-swatch-line"
+                  style={{ backgroundColor: FIELD_COLOR }}
+                />
+              )}
+              <span className="ed-legend-label">Penandaan lapangan</span>
+            </div>
+          </div>
+
+          {/* ---- Empty state ---- */}
+          {features.features.length === 0 && !initialLoading && (
+            <div className="ed-empty-state">
+              <div className="ed-empty-state-card">
+                <div className="ed-empty-state-icon">
+                  <svg
+                    width="40"
+                    height="40"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
+                    <circle cx="12" cy="9" r="2.5" />
+                  </svg>
+                </div>
+                <h3 className="ed-empty-state-title">Belum ada data</h3>
+                <p className="ed-empty-state-text">
+                  Klik &ldquo;
+                  {isPoint ? "+ Titik" : "+ Garis"}
+                  &rdquo; untuk menambah fitur pertama.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ---- Loading chip ---- */}
+          {initialLoading && (
+            <div className="ed-loading-chip">
+              <div className="ed-loading-spinner" />
+              Memuat data&hellip;
+            </div>
+          )}
+        </div>
 
         {formOpen && (
           <AttributeForm
@@ -631,8 +925,7 @@ export default function DatasetEditor() {
             feature={formMode === "update" ? selectedFeature : null}
             mode={formMode}
             canEdit={
-              isSuperAdmin ||
-              (isEditor && (editWindow?.open || fieldMode))
+              isSuperAdmin || (isEditor && (editWindow?.open || fieldMode))
             }
             canDelete={isSuperAdmin || isEditor}
             onSave={handleSave}
@@ -650,8 +943,11 @@ export default function DatasetEditor() {
         )}
       </div>
 
+      {/* -------- toast -------- */}
       {toast && (
-        <div className={`ed-toast ${toast.ok ? "ed-toast-ok" : "ed-toast-err"}`}>
+        <div
+          className={`ed-toast ${toast.ok ? "ed-toast-ok" : "ed-toast-err"}`}
+        >
           {toast.msg}
         </div>
       )}

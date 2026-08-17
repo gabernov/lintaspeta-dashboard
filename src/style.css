@@ -339,10 +339,10 @@ body {
 
 /* ---------- Editor Layout ---------- */
 .ed-root {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   height: 100%;
   margin: -24px -28px;
+  overflow: hidden;
 }
 .ed-toolbar {
   display: flex;
@@ -483,14 +483,14 @@ body {
 
 /* Map */
 .ed-body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
   position: relative;
+  height: 100%;
+  width: 100%;
 }
 .ed-map-wrap {
-  flex: 1;
-  min-height: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 .ed-map-wrap .maplibregl-map {
   height: 100%;
@@ -689,4 +689,209 @@ body {
 /* Terra Draw toolbar hide (we use custom buttons) */
 .maplibregl-ctrl-group.terra-draw-controls {
   display: none !important;
+}
+
+/* ================================================================
+   DatasetEditor Polish — appended styles
+   ================================================================ */
+
+/* ---- Toolbar sticky + glass ---- */
+.ed-toolbar {
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(30, 41, 59, 0.88);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- Map wrap: position context for overlays ---- */
+.ed-map-wrap {
+  position: relative;
+}
+
+/* ---- Floating Toolbox (top-right, glassmorphism) ---- */
+.ed-toolbox {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.ed-toolbox-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ed-toolbox-btn:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text);
+}
+.ed-toolbox-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.ed-toolbox-btn:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* Field-mode active */
+.ed-toolbox-btn-active {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.3);
+}
+.ed-toolbox-btn-active:hover {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+/* Publish button accent */
+.ed-toolbox-btn-publish {
+  color: #a855f7;
+}
+.ed-toolbox-btn-publish:hover {
+  background: rgba(168, 85, 247, 0.14);
+  color: #c084fc;
+}
+
+/* Divider between tools and zoom */
+.ed-toolbox-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* ---- Legend (bottom-left, above scale) ---- */
+.ed-legend {
+  position: absolute;
+  bottom: 40px;
+  left: 12px;
+  z-index: 5;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.ed-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ed-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(15, 23, 42, 0.6);
+  flex-shrink: 0;
+}
+.ed-legend-swatch-field {
+  border-color: rgba(146, 64, 14, 0.5);
+}
+.ed-legend-swatch-line {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.ed-legend-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ---- Empty state (centered overlay) ---- */
+.ed-empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.ed-empty-state-card {
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 14px;
+  padding: 28px 36px;
+  text-align: center;
+  max-width: 340px;
+}
+.ed-empty-state-icon {
+  margin-bottom: 14px;
+  opacity: 0.45;
+  color: var(--text-muted);
+}
+.ed-empty-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+.ed-empty-state-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ---- Loading chip ---- */
+.ed-loading-chip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.ed-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(148, 163, 184, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ed-spin 0.75s linear infinite;
+}
+@keyframes ed-spin {
+  to { transform: rotate(360deg); }
 }
