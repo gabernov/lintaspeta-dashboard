@@ -201,28 +201,28 @@ declare
 begin
   case p_dataset
     when 'ruas_jalan' then
-      delete from public.ruas_jalan_published;
+      delete from public.ruas_jalan_published where true;
       insert into public.ruas_jalan_published (source_id, geometry, properties, published_at, published_by)
       select source_id, geometry, properties, now(), auth.uid()
       from public.ruas_jalan_draft
       where status in ('approved', 'pending') or source_type = 'field';
       get diagnostics v_count = row_count;
     when 'sekolah' then
-      delete from public.sekolah_published;
+      delete from public.sekolah_published where true;
       insert into public.sekolah_published (source_id, geometry, properties, published_at, published_by)
       select source_id, geometry, properties, now(), auth.uid()
       from public.sekolah_draft
       where status in ('approved', 'pending') or source_type = 'field';
       get diagnostics v_count = row_count;
     when 'rambu' then
-      delete from public.rambu_published;
+      delete from public.rambu_published where true;
       insert into public.rambu_published (source_id, geometry, properties, published_at, published_by)
       select source_id, geometry, properties, now(), auth.uid()
       from public.rambu_draft
       where status in ('approved', 'pending') or source_type = 'field';
       get diagnostics v_count = row_count;
     when 'apj' then
-      delete from public.apj_published;
+      delete from public.apj_published where true;
       insert into public.apj_published (source_id, geometry, properties, published_at, published_by)
       select source_id, geometry, properties, now(), auth.uid()
       from public.apj_draft

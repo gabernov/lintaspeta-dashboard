@@ -242,7 +242,8 @@ export default function DatasetEditor() {
       maxWidth: "320px",
     });
 
-    map.on("load", () => {
+    const onLoad = () => {
+      if (map.getSource("draft")) return;
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -378,7 +379,57 @@ export default function DatasetEditor() {
           }
         }
       });
-    });
+
+      initTerraDraw();
+    };
+
+    if (map.isStyleLoaded()) {
+      onLoad();
+    } else {
+      map.once("load", onLoad);
+      map.once("styledata", onLoad);
+      // Fallback: if the style never fully "loads" (e.g. slow glyph/tile server),
+      // still init once the base style is present.
+      const t = setTimeout(onLoad, 8000);
+      map.once("remove", () => clearTimeout(t));
+    }
+
+    function initTerraDraw() {
+      if (tdRef.current) {
+        tdRef.current.stop();
+        tdRef.current = null;
+      }
+      const adapter = new TerraDrawMapLibreGLAdapter({ map });
+
+        const modes = isPoint
+          ? [new TerraDrawPointMode()]
+          : [new TerraDrawLineStringMode()];
+
+        const td = new TerraDraw({ adapter, modes });
+        td.start();
+        tdRef.current = td;
+        td.setMode(canDraw ? (isPoint ? "point" : "linestring") : "static");
+
+        td.on("finish", (_id, context) => {
+            if (context.action === "draw") {
+            const snap = td.getSnapshot();
+            const drawn = snap.find(
+              (f) =>
+                f.properties?.mode === (isPoint ? "point" : "linestring") &&
+                !f.properties?.currentlyDrawing
+            );
+            if (drawn) {
+              const geom = drawn.geometry as Point | LineString;
+              setPendingGeometry(geom);
+              setFormMode("create");
+              setSelectedFeature(null);
+              setFormOpen(true);
+            }
+            td.clear();
+          }
+        });
+
+    }
 
     return () => {
       closePopup();
@@ -388,57 +439,6 @@ export default function DatasetEditor() {
       mapRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!meta || !mapRef.current) return;
-    const map = mapRef.current;
-
-    if (!map.isStyleLoaded()) {
-      map.once("load", () => initTerraDraw());
-      return;
-    }
-    initTerraDraw();
-
-    function initTerraDraw() {
-      if (tdRef.current) {
-        tdRef.current.stop();
-        tdRef.current = null;
-      }
-
-      const adapter = new TerraDrawMapLibreGLAdapter({ map });
-
-      const modes = isPoint
-        ? [
-            new TerraDrawPointMode(),
-          ]
-        : [
-            new TerraDrawLineStringMode(),
-          ];
-
-      const td = new TerraDraw({ adapter, modes });
-      td.start();
-      tdRef.current = td;
-
-      td.on("finish", (_id, context) => {
-        if (context.action === "draw") {
-          const snap = td.getSnapshot();
-          const drawn = snap.find(
-            (f) =>
-              f.properties?.mode === (isPoint ? "point" : "linestring") &&
-              !f.properties?.currentlyDrawing
-          );
-          if (drawn) {
-            const geom = drawn.geometry as Point | LineString;
-            setPendingGeometry(geom);
-            setFormMode("create");
-            setSelectedFeature(null);
-            setFormOpen(true);
-          }
-          td.clear();
-        }
-      });
-    }
-  }, [meta, isPoint]);
 
   useEffect(() => {
     if (tdRef.current && meta) {
@@ -468,6 +468,11 @@ export default function DatasetEditor() {
           void refreshFeatures();
         }
       )
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const users = Object.keys(state);
+        setOnlineCount(users.length);
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           setOnlineCount(1);
@@ -475,16 +480,6 @@ export default function DatasetEditor() {
       });
 
     void channel.track({ user: profile?.id ?? "anon" });
-
-    channel.on(
-      "presence",
-      { event: "sync" },
-      () => {
-        const state = channel.presenceState();
-        const users = Object.keys(state);
-        setOnlineCount(users.length);
-      }
-    );
 
     return () => {
       void channel.untrack();
