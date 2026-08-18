@@ -1631,3 +1631,84 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.08);
   border-radius: 14px;
 }
+
+/* Pivot per-peta */
+.pivot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.pivot-card {
+  --accent: #3b82f6;
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pivot-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pivot-card-head .card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+.pivot-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+.pivot-card-total {
+  margin-left: auto;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.pivot-dim {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pivot-dim-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.pivot-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 56px;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.pivot-row-label {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pivot-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  overflow: hidden;
+}
+.pivot-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.pivot-row-count {
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

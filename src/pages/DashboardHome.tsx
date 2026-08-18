@@ -35,12 +35,38 @@ const ICONS: Record<DatasetMeta["id"], React.ReactNode> = {
   ),
 };
 
+interface PivotValue {
+  value: string;
+  count: number;
+}
+
+const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }>> = {
+  apj: [
+    { key: "UPTD", label: "UPTD" },
+    { key: "Kondisi", label: "Kondisi" },
+    { key: "Kabupaten/Kota", label: "Kab/Kota" },
+  ],
+  sekolah: [
+    { key: "Jenjang", label: "Jenjang" },
+    { key: "Status", label: "Status" },
+  ],
+  rambu: [
+    { key: "kelas_jalan", label: "Kelas Jalan" },
+    { key: "status", label: "Status" },
+  ],
+  ruas_jalan: [
+    { key: "unit_kerja_kode", label: "UPTD" },
+    { key: "status", label: "Status" },
+  ],
+};
+
 export default function DashboardHome() {
   const { profile, role } = useAuth();
   const [windows, setWindows] = useState<Record<string, EditWindow>>({});
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [published, setPublished] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [pivots, setPivots] = useState<Record<string, Record<string, PivotValue[]>>>({});
 
   useEffect(() => {
     supabase.from("edit_windows").select("*").then(({ data }) => {
@@ -66,6 +92,24 @@ export default function DashboardHome() {
         .select("id", { count: "exact", head: true })
         .then(({ count }) => {
           setPublished((c) => ({ ...c, [d.id]: count ?? 0 }));
+        });
+    }
+  }, []);
+
+  useEffect(() => {
+    for (const d of DATASETS) {
+      const keys = (PIVOT_KEYS[d.id] ?? []).map((p) => p.key);
+      if (keys.length === 0) continue;
+      supabase
+        .rpc("dataset_pivot", { p_dataset: d.id, p_keys: keys })
+        .then(({ data, error }) => {
+          if (error || !data) return;
+          const groups = data as Record<string, PivotValue[]>;
+          const entries: Record<string, PivotValue[]> = {};
+          for (const [k, arr] of Object.entries(groups)) {
+            entries[k] = (arr ?? []).slice(0, 6);
+          }
+          setPivots((p) => ({ ...p, [d.id]: entries }));
         });
     }
   }, []);
@@ -132,6 +176,56 @@ export default function DashboardHome() {
                 </div>
                 <div className="card-arrow" aria-hidden="true">→</div>
               </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="home-section">
+        <div className="home-section-head">
+          <h2>Ringkasan per Peta</h2>
+          <span className="muted">Distribusi data draft per dimensi</span>
+        </div>
+        <div className="pivot-grid">
+          {DATASETS.map((d) => {
+            const groups = pivots[d.id];
+            const dims = PIVOT_KEYS[d.id] ?? [];
+            return (
+              <div className="pivot-card" key={d.id} style={{ "--accent": d.defaultColor } as React.CSSProperties}>
+                <div className="pivot-card-head">
+                  <span className="card-icon" aria-hidden="true">{ICONS[d.id]}</span>
+                  <span className="pivot-card-title">{d.label}</span>
+                  <span className="pivot-card-total">
+                    {(counts[d.id] ?? 0).toLocaleString("id-ID")}
+                  </span>
+                </div>
+                {dims.map((dim) => {
+                  const rows = groups?.[dim.key];
+                  if (!rows || rows.length === 0) return null;
+                  const max = Math.max(...rows.map((r) => r.count));
+                  return (
+                    <div className="pivot-dim" key={dim.key}>
+                      <div className="pivot-dim-label">{dim.label}</div>
+                      {rows.map((r) => (
+                        <div className="pivot-row" key={r.value}>
+                          <span className="pivot-row-label" title={r.value}>
+                            {r.value}
+                          </span>
+                          <div className="pivot-bar-track">
+                            <div
+                              className="pivot-bar-fill"
+                              style={{ width: `${Math.round((r.count / max) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="pivot-row-count">
+                            {r.count.toLocaleString("id-ID")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
             );
           })}
         </div>

@@ -143,6 +143,7 @@ export default function DatasetEditor() {
     if (!datasetId) return;
     const { data, error } = await supabase.rpc("draft_features_geojson", {
       p_dataset: datasetId,
+      p_light: true,
     });
     if (error) {
       console.error("fetch features:", error.message);
@@ -187,6 +188,22 @@ export default function DatasetEditor() {
       .maybeSingle();
     if (data) setEditWindow(data as EditWindow);
   }, [datasetId]);
+
+  const fetchFeatureDetail = useCallback(
+    async (id: string): Promise<Feature | null> => {
+      if (!datasetId) return null;
+      const { data, error } = await supabase.rpc("draft_feature_detail", {
+        p_dataset: datasetId,
+        p_id: id,
+      });
+      if (error || !data) {
+        console.error("fetch feature detail:", error?.message ?? "no data");
+        return null;
+      }
+      return data as Feature;
+    },
+    [datasetId]
+  );
 
   const toggleWindow = useCallback(async () => {
     if (!editWindow || !datasetId) return;
@@ -462,7 +479,6 @@ export default function DatasetEditor() {
           if (tdRef.current?.enabled) return;
 
           const feat = e.features[0] as unknown as Feature;
-          const props = feat.properties as GeoProps | null;
           const coords =
             feat.geometry.type === "Point"
               ? (feat.geometry as Point).coordinates
@@ -471,10 +487,13 @@ export default function DatasetEditor() {
                 : [e.lngLat.lng, e.lngLat.lat];
 
           closePopup();
-          popupRef.current
-            ?.setLngLat(coords as [number, number])
-            .setHTML(buildPopupHtml(props))
-            .addTo(map);
+          void fetchFeatureDetail(String(feat.id)).then((full) => {
+            const props = (full?.properties ?? feat.properties) as GeoProps | null;
+            popupRef.current
+              ?.setLngLat(coords as [number, number])
+              .setHTML(buildPopupHtml(props))
+              .addTo(map);
+          });
 
           popupRef.current?.on("close", () => {
             if (formMode === "update" && selectedFeature?.id === feat.id) {
@@ -635,7 +654,11 @@ export default function DatasetEditor() {
       const id = String(selectedFeature.id);
       const live = features.features.find((f) => String(f.id) === id);
       if (live) {
-        setSelectedFeature(live as Feature);
+        const liveProps = (live.properties ?? {}) as Record<string, unknown>;
+        const hasFullProps = Object.keys(liveProps).some((k) => !k.startsWith("_"));
+        if (hasFullProps) {
+          setSelectedFeature(live as Feature);
+        }
       } else {
         setFormOpen(false);
         setSelectedFeature(null);
@@ -647,12 +670,14 @@ export default function DatasetEditor() {
   const handleFeatureClick = useCallback(
     (feat: Feature) => {
       closePopup();
-      setSelectedFeature(feat);
-      setFormMode("update");
-      setPendingGeometry(null);
-      setFormOpen(true);
+      void fetchFeatureDetail(String(feat.id)).then((full) => {
+        setSelectedFeature(full ?? feat);
+        setFormMode("update");
+        setPendingGeometry(null);
+        setFormOpen(true);
+      });
     },
-    [closePopup]
+    [closePopup, fetchFeatureDetail]
   );
 
   useEffect(() => {
