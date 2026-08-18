@@ -63,6 +63,8 @@ const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }
   sekolah: [
     { key: "Jenjang", label: "Jenjang" },
     { key: "Status", label: "Status" },
+    { key: "UPTD", label: "UPTD" },
+    { key: "KABUPATEN", label: "Kab/Kota" },
   ],
   rambu: [
     { key: "kelas_jalan", label: "Kelas Jalan" },
@@ -71,6 +73,7 @@ const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }
   ruas_jalan: [
     { key: "unit_kerja_kode", label: "UPTD" },
     { key: "status", label: "Status" },
+    { key: "KABUPATEN", label: "Kab/Kota" },
   ],
 };
 
@@ -319,19 +322,24 @@ function DistributionTable({
 }) {
   const cell = (val?: number) =>
     val != null && val > 0 ? val.toLocaleString("id-ID") : "—";
+  const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, "");
 
   if (tab === "lokasi") {
     const apjKab = dists.apj?.kab ?? [];
     const sklKab = dists.sekolah?.kab ?? [];
-    const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, "");
+    const ruasKab = dists.ruas_jalan?.kab ?? [];
     const kabSet = new Map<string, string>();
     for (const k of apjKab) kabSet.set(norm(k.value), k.value);
     for (const k of sklKab) {
       if (!kabSet.has(norm(k.value))) kabSet.set(norm(k.value), k.value);
     }
+    for (const k of ruasKab) {
+      if (!kabSet.has(norm(k.value))) kabSet.set(norm(k.value), k.value);
+    }
     const kabRows = Array.from(kabSet.values()).sort((a, b) => a.localeCompare(b, "id"));
     const apjMap = new Map(apjKab.map((k) => [norm(k.value), k.count]));
     const sklMap = new Map(sklKab.map((k) => [norm(k.value), k.count]));
+    const ruasMap = new Map(ruasKab.map((k) => [norm(k.value), k.count]));
     return (
       <div className="dist-table-wrap">
         <table className="dist-table">
@@ -356,6 +364,7 @@ function DistributionTable({
                 {DIST_COLUMNS.map((c) => {
                   if (c.id === "apj") return <td key={c.id}>{cell(apjMap.get(norm(kab)))}</td>;
                   if (c.id === "sekolah") return <td key={c.id}>{cell(sklMap.get(norm(kab)))}</td>;
+                  if (c.id === "ruas_jalan") return <td key={c.id}>{cell(ruasMap.get(norm(kab)))}</td>;
                   return <td key={c.id}>—</td>;
                 })}
               </tr>
@@ -368,9 +377,13 @@ function DistributionTable({
 
   const apjUptd = dists.apj?.uptd ?? [];
   const apjUptdMap = new Map(apjUptd.map((u) => [UPTD_MAP[u.value] ?? u.value, u.count]));
+  const sklUptd = dists.sekolah?.uptd ?? [];
+  const sklUptdMap = new Map(sklUptd.map((u) => [UPTD_MAP[u.value] ?? u.value, u.count]));
   const ruasUptd = dists.ruas_jalan?.uptd ?? [];
   const ruasUptdMap = new Map(ruasUptd.map((u) => [UPTD_MAP[u.value] ?? u.value, u.count]));
-  const uptdKab = dists.apj?.uptd_kab ?? [];
+  const apjUptdKab = dists.apj?.uptd_kab ?? [];
+  const sklUptdKab = dists.sekolah?.uptd_kab ?? [];
+  const ruasUptdKab = dists.ruas_jalan?.uptd_kab ?? [];
   const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
   return (
     <div className="dist-table-wrap">
@@ -391,25 +404,45 @@ function DistributionTable({
             ))}
           </tr>
           {uptdOrder.map((uptd) => {
-            const kabSub = uptdKab
-              .filter((r) => (UPTD_MAP[r.uptd] ?? r.uptd) === uptd)
-              .sort((a, b) => a.kab.localeCompare(b.kab, "id"));
+            const kabSet = new Map<string, { label: string; apj?: number; skl?: number; ruas?: number }>();
+            for (const r of apjUptdKab) {
+              if ((UPTD_MAP[r.uptd] ?? r.uptd) !== uptd) continue;
+              const key = norm(r.kab);
+              const cur = kabSet.get(key) ?? { label: r.kab };
+              cur.apj = (cur.apj ?? 0) + r.count;
+              kabSet.set(key, cur);
+            }
+            for (const r of sklUptdKab) {
+              if ((UPTD_MAP[r.uptd] ?? r.uptd) !== uptd) continue;
+              const key = norm(r.kab);
+              const cur = kabSet.get(key) ?? { label: r.kab };
+              cur.skl = (cur.skl ?? 0) + r.count;
+              kabSet.set(key, cur);
+            }
+            for (const r of ruasUptdKab) {
+              if ((UPTD_MAP[r.uptd] ?? r.uptd) !== uptd) continue;
+              const key = norm(r.kab);
+              const cur = kabSet.get(key) ?? { label: r.kab };
+              cur.ruas = (cur.ruas ?? 0) + r.count;
+              kabSet.set(key, cur);
+            }
+            const kabRows = Array.from(kabSet.values()).sort((a, b) => a.label.localeCompare(b.label, "id"));
             return (
               <Fragment key={uptd}>
                 <tr className="dist-uptd-row">
                   <td>{uptd}</td>
                   <td>{cell(apjUptdMap.get(uptd))}</td>
                   <td>—</td>
-                  <td>—</td>
+                  <td>{cell(sklUptdMap.get(uptd))}</td>
                   <td>{cell(ruasUptdMap.get(uptd))}</td>
                 </tr>
-                {kabSub.map((r) => (
-                  <tr key={`${uptd}-${r.kab}`}>
-                    <td className="dist-lokasi">⊔ {r.kab}</td>
-                    <td>{cell(r.count)}</td>
+                {kabRows.map((r) => (
+                  <tr key={`${uptd}-${norm(r.label)}`}>
+                    <td className="dist-lokasi">⊔ {r.label}</td>
+                    <td>{cell(r.apj)}</td>
                     <td>—</td>
-                    <td>—</td>
-                    <td>—</td>
+                    <td>{cell(r.skl)}</td>
+                    <td>{cell(r.ruas)}</td>
                   </tr>
                 ))}
               </Fragment>
