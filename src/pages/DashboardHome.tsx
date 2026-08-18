@@ -8,29 +8,32 @@ import type { EditWindow, DatasetMeta } from "../lib/types";
 const ICONS: Record<DatasetMeta["id"], React.ReactNode> = {
   ruas_jalan: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 18 8 6h2l-1 4 3 1 1-3h2l-1 4 3 1 1-3h2l4 12" />
-      <path d="M4 18h16" />
+      <circle cx="6" cy="19" r="3" />
+      <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+      <circle cx="18" cy="5" r="3" />
     </svg>
   ),
   sekolah: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10 12 4l9 6" />
-      <path d="M5 10v9h14v-9" />
-      <path d="M9 19v-5h6v5" />
+      <path d="m4 10 8-6 8 6" />
+      <path d="M6 10v9h12v-9" />
+      <path d="M10 19v-5h4v5" />
     </svg>
   ),
   rambu: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v18" />
-      <path d="M5 7h14M5 12h14M5 17h14" />
-      <circle cx="9" cy="7" r="1" fill="currentColor" />
-      <circle cx="15" cy="12" r="1" fill="currentColor" />
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
   ),
   apj: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
-      <circle cx="12" cy="9" r="2.5" />
+      <path d="M8 22V5" />
+      <path d="M4 22h9" />
+      <path d="M8 5c4 0 6 1.5 6 4" />
+      <path d="M14 9.5l2 1.5" />
+      <circle cx="16.5" cy="10.5" r="1.8" fill="currentColor" stroke="none" />
     </svg>
   ),
 };
