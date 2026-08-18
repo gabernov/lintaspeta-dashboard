@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import AppShell from "./components/AppShell";
@@ -7,6 +7,11 @@ import DatasetEditor from "./pages/DatasetEditor";
 import AuditPage from "./pages/AuditPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import type { Role } from "./lib/types";
+
+function DatasetEditorRoute() {
+  const { datasetId } = useParams<{ datasetId: string }>();
+  return <DatasetEditor key={datasetId} />;
+}
 
 function Protected({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
   const { session, loading, profile } = useAuth();
@@ -29,7 +34,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardHome />} />
-        <Route path="dataset/:datasetId" element={<DatasetEditor />} />
+        <Route path="dataset/:datasetId" element={<DatasetEditorRoute />} />
         <Route
           path="audit"
           element={

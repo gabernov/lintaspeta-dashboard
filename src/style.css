@@ -135,9 +135,45 @@ body {
 
 /* ---------- Shell ---------- */
 .shell {
-  display: grid;
-  grid-template-columns: 240px 1fr;
+  display: flex;
   height: 100%;
+  width: 100%;
+}
+.sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  transition: width 0.2s ease, opacity 0.2s ease;
+}
+.shell-collapsed .sidebar {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+.sidebar-toggle {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 30;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.85);
+  color: var(--text-muted);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background 0.12s, color 0.12s;
+}
+.sidebar-toggle:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+.shell-collapsed .sidebar-toggle {
+  left: 12px;
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
 }
 .sidebar {
   background: var(--bg-soft);
@@ -201,7 +237,17 @@ body {
   font-size: 12px;
 }
 .content {
-  overflow: auto;
+  overflow: hidden;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Non-editor pages scroll inside a padded container */
+.page,
+.home {
+  height: 100%;
+  overflow-y: auto;
   padding: 24px 28px;
 }
 
@@ -339,9 +385,8 @@ body {
 
 /* ---------- Editor Layout ---------- */
 .ed-root {
-  position: relative;
-  height: 100%;
-  margin: -24px -28px;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
 }
 .ed-toolbar {
@@ -709,6 +754,92 @@ body {
 /* ---- Map wrap: position context for overlays ---- */
 .ed-map-wrap {
   position: relative;
+}
+
+/* ---- Top-left panel: title, online, edit window (glassmorphism) ---- */
+.ed-panel-tl {
+  position: absolute;
+  top: 56px; /* below the floating sidebar-toggle (top:10px) */
+  left: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+.ed-panel-tl-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+.ed-panel-tl-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.ed-panel-tl-sub .ed-live-dot {
+  flex-shrink: 0;
+}
+.ed-window-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ed-window-pill-open {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.35);
+}
+.ed-window-pill-closed {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
+}
+.ed-window-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ed-window-btn:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text);
+}
+.ed-window-btn-open {
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+.ed-window-btn-open:hover {
+  background: rgba(34, 197, 94, 0.14);
+}
+.ed-window-btn-close {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+.ed-window-btn-close:hover {
+  background: rgba(239, 68, 68, 0.14);
 }
 
 /* ---- Floating Toolbox (top-right, glassmorphism) ---- */
