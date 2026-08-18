@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { DATASETS } from "../lib/datasets";
@@ -40,6 +40,20 @@ interface PivotValue {
   count: number;
 }
 
+interface UptdKabRow {
+  uptd: string;
+  kab: string;
+  count: number;
+}
+
+interface DistributionData {
+  dataset: string;
+  total: number;
+  uptd: PivotValue[];
+  kab: PivotValue[];
+  uptd_kab: UptdKabRow[];
+}
+
 const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }>> = {
   apj: [
     { key: "UPTD", label: "UPTD" },
@@ -67,6 +81,8 @@ export default function DashboardHome() {
   const [published, setPublished] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [pivots, setPivots] = useState<Record<string, Record<string, PivotValue[]>>>({});
+  const [dists, setDists] = useState<Record<string, DistributionData>>({});
+  const [distTab, setDistTab] = useState<"uptd" | "lokasi">("uptd");
 
   useEffect(() => {
     supabase.from("edit_windows").select("*").then(({ data }) => {
@@ -110,6 +126,17 @@ export default function DashboardHome() {
             entries[k] = (arr ?? []).slice(0, 6);
           }
           setPivots((p) => ({ ...p, [d.id]: entries }));
+        });
+    }
+  }, []);
+
+  useEffect(() => {
+    for (const d of DATASETS) {
+      supabase
+        .rpc("dataset_distribution", { p_dataset: d.id })
+        .then(({ data, error }) => {
+          if (error || !data) return;
+          setDists((p) => ({ ...p, [d.id]: data as DistributionData }));
         });
     }
   }, []);
@@ -231,6 +258,27 @@ export default function DashboardHome() {
         </div>
       </section>
 
+      <section className="home-section">
+        <div className="home-section-head">
+          <h2>Distribusi Data per UPTD &amp; Lokasi</h2>
+          <div className="dist-tabs">
+            <button
+              className={`dist-tab${distTab === "uptd" ? " dist-tab-active" : ""}`}
+              onClick={() => setDistTab("uptd")}
+            >
+              Per UPTD &amp; Lokasi
+            </button>
+            <button
+              className={`dist-tab${distTab === "lokasi" ? " dist-tab-active" : ""}`}
+              onClick={() => setDistTab("lokasi")}
+            >
+              Per Lokasi
+            </button>
+          </div>
+        </div>
+        <DistributionTable dists={dists} tab={distTab} />
+      </section>
+
       {role === "super_admin" && (
         <section className="home-section">
           <div className="home-section-head">
@@ -240,6 +288,135 @@ export default function DashboardHome() {
           <RecentActivity />
         </section>
       )}
+    </div>
+  );
+}
+
+const DIST_COLUMNS: Array<{ id: DatasetMeta["id"]; label: string }> = [
+  { id: "apj", label: "PJU" },
+  { id: "rambu", label: "RAMBU" },
+  { id: "sekolah", label: "SEKOLAH" },
+  { id: "ruas_jalan", label: "RUAS JALAN" },
+];
+
+const UPTD_MAP: Record<string, string> = {
+  "UPTD 1": "UPTD-I",
+  "UPTD 2": "UPTD-II",
+  "UPTD 3": "UPTD-III",
+  "UPTD 4": "UPTD-IV",
+  "UPTD-I": "UPTD-I",
+  "UPTD-II": "UPTD-II",
+  "UPTD-III": "UPTD-III",
+  "UPTD-IV": "UPTD-IV",
+};
+
+function DistributionTable({
+  dists,
+  tab,
+}: {
+  dists: Record<string, DistributionData>;
+  tab: "uptd" | "lokasi";
+}) {
+  const cell = (val?: number) =>
+    val != null && val > 0 ? val.toLocaleString("id-ID") : "—";
+
+  if (tab === "lokasi") {
+    const apjKab = dists.apj?.kab ?? [];
+    const sklKab = dists.sekolah?.kab ?? [];
+    const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, "");
+    const kabSet = new Map<string, string>();
+    for (const k of apjKab) kabSet.set(norm(k.value), k.value);
+    for (const k of sklKab) {
+      if (!kabSet.has(norm(k.value))) kabSet.set(norm(k.value), k.value);
+    }
+    const kabRows = Array.from(kabSet.values()).sort((a, b) => a.localeCompare(b, "id"));
+    const apjMap = new Map(apjKab.map((k) => [norm(k.value), k.count]));
+    const sklMap = new Map(sklKab.map((k) => [norm(k.value), k.count]));
+    return (
+      <div className="dist-table-wrap">
+        <table className="dist-table">
+          <thead>
+            <tr>
+              <th>Lokasi</th>
+              {DIST_COLUMNS.map((c) => (
+                <th key={c.id}>{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="dist-total-row">
+              <td>Dishub Jabar</td>
+              {DIST_COLUMNS.map((c) => (
+                <td key={c.id}>{cell(dists[c.id]?.total)}</td>
+              ))}
+            </tr>
+            {kabRows.map((kab) => (
+              <tr key={kab}>
+                <td className="dist-lokasi">{kab}</td>
+                {DIST_COLUMNS.map((c) => {
+                  if (c.id === "apj") return <td key={c.id}>{cell(apjMap.get(norm(kab)))}</td>;
+                  if (c.id === "sekolah") return <td key={c.id}>{cell(sklMap.get(norm(kab)))}</td>;
+                  return <td key={c.id}>—</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  const apjUptd = dists.apj?.uptd ?? [];
+  const apjUptdMap = new Map(apjUptd.map((u) => [UPTD_MAP[u.value] ?? u.value, u.count]));
+  const ruasUptd = dists.ruas_jalan?.uptd ?? [];
+  const ruasUptdMap = new Map(ruasUptd.map((u) => [UPTD_MAP[u.value] ?? u.value, u.count]));
+  const uptdKab = dists.apj?.uptd_kab ?? [];
+  const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
+  return (
+    <div className="dist-table-wrap">
+      <table className="dist-table">
+        <thead>
+          <tr>
+            <th>UPTD / Lokasi</th>
+            {DIST_COLUMNS.map((c) => (
+              <th key={c.id}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="dist-total-row">
+            <td>Dishub Jabar</td>
+            {DIST_COLUMNS.map((c) => (
+              <td key={c.id}>{cell(dists[c.id]?.total)}</td>
+            ))}
+          </tr>
+          {uptdOrder.map((uptd) => {
+            const kabSub = uptdKab
+              .filter((r) => (UPTD_MAP[r.uptd] ?? r.uptd) === uptd)
+              .sort((a, b) => a.kab.localeCompare(b.kab, "id"));
+            return (
+              <Fragment key={uptd}>
+                <tr className="dist-uptd-row">
+                  <td>{uptd}</td>
+                  <td>{cell(apjUptdMap.get(uptd))}</td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>{cell(ruasUptdMap.get(uptd))}</td>
+                </tr>
+                {kabSub.map((r) => (
+                  <tr key={`${uptd}-${r.kab}`}>
+                    <td className="dist-lokasi">⊔ {r.kab}</td>
+                    <td>{cell(r.count)}</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                  </tr>
+                ))}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

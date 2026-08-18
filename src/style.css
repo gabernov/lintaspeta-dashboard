@@ -1712,3 +1712,149 @@ body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* Distribusi Data per UPTD & Lokasi */
+.dist-tabs {
+  display: flex;
+  gap: 6px;
+}
+.dist-tab {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.dist-tab:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text);
+}
+.dist-tab-active {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+.dist-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(30, 41, 59, 0.4);
+}
+.dist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 560px;
+}
+.dist-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+.dist-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dist-table tr:last-child td {
+  border-bottom: none;
+}
+.dist-table tbody tr:hover {
+  background: rgba(148, 163, 184, 0.05);
+}
+.dist-total-row td {
+  background: rgba(59, 130, 246, 0.08);
+  font-weight: 700;
+}
+.dist-uptd-row td {
+  background: rgba(148, 163, 184, 0.08);
+  font-weight: 600;
+}
+.dist-lokasi {
+  color: var(--text-muted) !important;
+  padding-left: 30px !important;
+}
+
+/* Distribusi Data per UPTD & Lokasi */
+.dist-tabs {
+  display: flex;
+  gap: 6px;
+}
+.dist-tab {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.dist-tab:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text);
+}
+.dist-tab-active {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+.dist-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(30, 41, 59, 0.4);
+}
+.dist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 560px;
+}
+.dist-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+.dist-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dist-table tr:last-child td {
+  border-bottom: none;
+}
+.dist-table tbody tr:hover {
+  background: rgba(148, 163, 184, 0.05);
+}
+.dist-total-row td {
+  background: rgba(59, 130, 246, 0.08);
+  font-weight: 700;
+}
+.dist-uptd-row td {
+  background: rgba(148, 163, 184, 0.08);
+  font-weight: 600;
+}
+.dist-lokasi {
+  color: var(--text-muted) !important;
+  padding-left: 30px !important;
+}

@@ -84,6 +84,29 @@ function computeBBox(
   return [minLng, minLat, maxLng, maxLat];
 }
 
+function translateGeometry(geom: Geometry, dLng: number, dLat: number): Geometry {
+  const shift = (c: number[]): number[] => [c[0] + dLng, c[1] + dLat];
+  switch (geom.type) {
+    case "Point":
+      return { type: "Point", coordinates: shift(geom.coordinates) };
+    case "LineString":
+      return { type: "LineString", coordinates: geom.coordinates.map(shift) };
+    case "MultiPoint":
+      return { type: "MultiPoint", coordinates: geom.coordinates.map(shift) };
+    case "MultiLineString":
+      return { type: "MultiLineString", coordinates: geom.coordinates.map((l) => l.map(shift)) };
+    case "Polygon":
+      return { type: "Polygon", coordinates: geom.coordinates.map((r) => r.map(shift)) };
+    case "MultiPolygon":
+      return {
+        type: "MultiPolygon",
+        coordinates: geom.coordinates.map((p) => p.map((r) => r.map(shift))),
+      };
+    default:
+      return geom;
+  }
+}
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -96,6 +119,13 @@ export default function DatasetEditor() {
   const tdRef = useRef<TerraDraw | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hasFittedRef = useRef(false);
+  const featuresRef = useRef<FeatureCollection | null>(null);
+  const moveModeRef = useRef(false);
+  const dragRef = useRef<{
+    featureId: string;
+    startLngLat: { lng: number; lat: number };
+    origGeom: Geometry;
+  } | null>(null);
 
   /* ---- state ---- */
   const [features, setFeatures] = useState<FeatureCollection>({
@@ -104,6 +134,7 @@ export default function DatasetEditor() {
   });
   const [editWindow, setEditWindow] = useState<EditWindow | null>(null);
   const [fieldMode, setFieldMode] = useState(false);
+  const [moveMode, setMoveMode] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "update">("create");
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -139,6 +170,30 @@ export default function DatasetEditor() {
     }
   }, [isPoint]);
 
+  const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("draft");
+    if (src && "setData" in src) {
+      (src as maplibregl.GeoJSONSource).setData(fc);
+    }
+    if (!hasFittedRef.current) {
+      const bbox = computeBBox(fc);
+      if (bbox) {
+        map.fitBounds(bbox, { padding: 60, maxZoom: 14 });
+      } else {
+        map.fitBounds(
+          [
+            [105.5, -8],
+            [109.5, -5.5],
+          ],
+          { padding: 60 }
+        );
+      }
+      hasFittedRef.current = true;
+    }
+  }, []);
+
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
     const { data, error } = await supabase.rpc("draft_features_geojson", {
@@ -152,30 +207,11 @@ export default function DatasetEditor() {
     }
     const fc = data as FeatureCollection;
     setFeatures(fc);
+    featuresRef.current = fc;
     setInitialLoading(false);
 
     if (mapRef.current?.isStyleLoaded()) {
-      const src = mapRef.current.getSource("draft");
-      if (src && "setData" in src) {
-        (src as maplibregl.GeoJSONSource).setData(fc);
-      }
-
-      /* fit-bounds once on first load so data fills the viewport */
-      if (!hasFittedRef.current) {
-        const bbox = computeBBox(fc);
-        if (bbox) {
-          mapRef.current.fitBounds(bbox, { padding: 60, maxZoom: 14 });
-        } else {
-          mapRef.current.fitBounds(
-            [
-              [105.5, -8],
-              [109.5, -5.5],
-            ],
-            { padding: 60 }
-          );
-        }
-        hasFittedRef.current = true;
-      }
+      applyFeaturesToSource(fc);
     }
   }, [datasetId]);
 
@@ -315,6 +351,38 @@ export default function DatasetEditor() {
     void refreshFeatures();
   }, [datasetId, selectedFeature, showToast, refreshFeatures]);
 
+  const persistMovedFeature = useCallback(
+    async (draftId: string, geometry: Geometry) => {
+      if (!meta || !datasetId) return;
+      const full = await fetchFeatureDetail(draftId);
+      if (!full) return;
+      const fullProps = (full.properties ?? {}) as Record<string, unknown>;
+      const regionVal = String(fullProps._region ?? region ?? "");
+      const sourceId = String(fullProps._source_id ?? full.id ?? `move-${Date.now()}`);
+      const sourceType = String(fullProps._source_type ?? "master");
+      const props: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(fullProps)) {
+        if (!k.startsWith("_")) props[k] = v;
+      }
+      const { error } = await supabase.rpc("save_draft_feature", {
+        p_dataset: datasetId,
+        p_id: draftId,
+        p_source_id: sourceId,
+        p_geometry: geometry,
+        p_properties: props,
+        p_region: regionVal,
+        p_source_type: sourceType,
+      });
+      if (error) {
+        showToast("Gagal menyimpan perpindahan: " + error.message, false);
+        return;
+      }
+      showToast("Posisi diperbarui", true);
+      void refreshFeatures();
+    },
+    [meta, datasetId, fetchFeatureDetail, region, showToast, refreshFeatures]
+  );
+
   const handlePublish = useCallback(async () => {
     if (!datasetId || !isSuperAdmin) return;
     if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`))
@@ -388,6 +456,62 @@ export default function DatasetEditor() {
 
     const onLoad = () => {
       if (map.getSource("draft")) return;
+
+      if (!map.getSource("roads-bg")) {
+        map.addSource("roads-bg", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "roads-bg-casing",
+          type: "line",
+          source: "roads-bg",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#0b1220",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 2,
+              10, 3,
+              14, 4.5,
+              18, 6,
+            ],
+            "line-opacity": 0.85,
+          },
+        });
+        map.addLayer({
+          id: "roads-bg-line",
+          type: "line",
+          source: "roads-bg",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#94a3b8",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 0.9,
+              10, 1.4,
+              14, 2.2,
+              18, 3.2,
+            ],
+            "line-opacity": 0.7,
+          },
+        });
+        void supabase
+          .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
+          .then(({ data }) => {
+            const src = map.getSource("roads-bg");
+            if (src && "setData" in src && data) {
+              (src as maplibregl.GeoJSONSource).setData(
+                data as FeatureCollection
+              );
+            }
+          });
+      }
+
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -487,7 +611,7 @@ export default function DatasetEditor() {
                 : [e.lngLat.lng, e.lngLat.lat];
 
           closePopup();
-          void fetchFeatureDetail(String(feat.id)).then((full) => {
+          void fetchFeatureDetail(resolveDraftId(feat)).then((full) => {
             const props = (full?.properties ?? feat.properties) as GeoProps | null;
             popupRef.current
               ?.setLngLat(coords as [number, number])
@@ -542,6 +666,10 @@ export default function DatasetEditor() {
       });
 
       initTerraDraw();
+
+      if (featuresRef.current) {
+        applyFeaturesToSource(featuresRef.current);
+      }
     };
 
     if (map.isStyleLoaded()) {
@@ -600,16 +728,23 @@ export default function DatasetEditor() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ---- keep moveMode ref in sync for event handlers ---- */
+  useEffect(() => {
+    moveModeRef.current = moveMode;
+  }, [moveMode]);
+
   /* ---- sync terra-draw mode with canDraw ---- */
   useEffect(() => {
     if (tdRef.current && meta) {
-      if (canDraw) {
+      if (moveMode) {
+        tdRef.current.setMode("static");
+      } else if (canDraw) {
         tdRef.current.setMode(isPoint ? "point" : "linestring");
       } else {
         tdRef.current.setMode("static");
       }
     }
-  }, [canDraw, meta, isPoint]);
+  }, [canDraw, meta, isPoint, moveMode]);
 
   /* ---- initial data fetch ---- */
   useEffect(() => {
@@ -667,18 +802,137 @@ export default function DatasetEditor() {
     }
   }, [features, formMode, selectedFeature]);
 
+  const resolveDraftId = useCallback((feat: Feature): string => {
+    const sourceId = (feat.properties as GeoProps | null)?._source_id;
+    if (sourceId != null) {
+      const real = featuresRef.current?.features.find(
+        (f) => (f.properties as GeoProps | null)?._source_id === sourceId
+      );
+      if (real) return String(real.id);
+    }
+    return String(feat.id);
+  }, []);
+
   const handleFeatureClick = useCallback(
     (feat: Feature) => {
       closePopup();
-      void fetchFeatureDetail(String(feat.id)).then((full) => {
+      void fetchFeatureDetail(resolveDraftId(feat)).then((full) => {
         setSelectedFeature(full ?? feat);
         setFormMode("update");
         setPendingGeometry(null);
         setFormOpen(true);
       });
     },
-    [closePopup, fetchFeatureDetail]
+    [closePopup, fetchFeatureDetail, resolveDraftId]
   );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !meta || !moveMode) return;
+
+    const layerId = isPoint ? "draft-points" : "draft-lines";
+    const previewPointLayer = "drag-preview-point";
+    const previewLineLayer = "drag-preview-line";
+
+    const ensurePreviewLayer = () => {
+      if (!map.getSource("drag-preview")) {
+        map.addSource("drag-preview", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      }
+      if (isPoint && !map.getLayer(previewPointLayer)) {
+        map.addLayer({
+          id: previewPointLayer,
+          type: "circle",
+          source: "drag-preview",
+          paint: {
+            "circle-radius": 10,
+            "circle-color": "#f59e0b",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+          },
+        });
+      }
+      if (!isPoint && !map.getLayer(previewLineLayer)) {
+        map.addLayer({
+          id: previewLineLayer,
+          type: "line",
+          source: "drag-preview",
+          paint: { "line-color": "#f59e0b", "line-width": 4 },
+        });
+      }
+    };
+
+    const removePreviewLayer = () => {
+      if (map.getLayer(previewPointLayer)) map.removeLayer(previewPointLayer);
+      if (map.getLayer(previewLineLayer)) map.removeLayer(previewLineLayer);
+      if (map.getSource("drag-preview")) map.removeSource("drag-preview");
+    };
+
+    const setPreview = (geom: Geometry) => {
+      const src = map.getSource("drag-preview");
+      if (src && "setData" in src) {
+        (src as maplibregl.GeoJSONSource).setData({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: geom, properties: {} }],
+        });
+      }
+    };
+
+    const onMouseDown = (e: maplibregl.MapMouseEvent) => {
+      if (!moveModeRef.current) return;
+      const feats = map.queryRenderedFeatures(e.point, { layers: [layerId] });
+      if (!feats.length) return;
+      const feat = feats[0] as unknown as Feature;
+      const g = feat.geometry;
+      if (!g || !g.type || !("coordinates" in g)) return;
+      dragRef.current = {
+        featureId: resolveDraftId(feat),
+        startLngLat: { lng: e.lngLat.lng, lat: e.lngLat.lat },
+        origGeom: g as Geometry,
+      };
+      ensurePreviewLayer();
+      setPreview(g as Geometry);
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    };
+
+    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dLng = e.lngLat.lng - d.startLngLat.lng;
+      const dLat = e.lngLat.lat - d.startLngLat.lat;
+      setPreview(translateGeometry(d.origGeom, dLng, dLat));
+    };
+
+    const onMouseUp = (e: maplibregl.MapMouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      dragRef.current = null;
+      const dLng = e.lngLat.lng - d.startLngLat.lng;
+      const dLat = e.lngLat.lat - d.startLngLat.lat;
+      removePreviewLayer();
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+      if (dLng === 0 && dLat === 0) return;
+      const newGeom = translateGeometry(d.origGeom, dLng, dLat);
+      void persistMovedFeature(d.featureId, newGeom);
+    };
+
+    map.on("mousedown", onMouseDown);
+    map.on("mousemove", onMouseMove);
+    map.on("mouseup", onMouseUp);
+    return () => {
+      map.off("mousedown", onMouseDown);
+      map.off("mousemove", onMouseMove);
+      map.off("mouseup", onMouseUp);
+      dragRef.current = null;
+      removePreviewLayer();
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+    };
+  }, [meta, isPoint, moveMode, persistMovedFeature, resolveDraftId]);
 
   useEffect(() => {
     if (!mapRef.current || !meta) return;
@@ -688,6 +942,7 @@ export default function DatasetEditor() {
     const handler = (e: maplibregl.MapLayerMouseEvent) => {
       if (!e.features?.length) return;
       if (tdRef.current?.enabled) return;
+      if (moveModeRef.current) return;
       handleFeatureClick(e.features[0] as unknown as Feature);
     };
 
@@ -777,6 +1032,32 @@ export default function DatasetEditor() {
                   <circle cx="12" cy="9" r="2.5" />
                 </svg>
               </button>
+
+              {canDraw && (
+                <button
+                  className={`ed-toolbox-btn${moveMode ? " ed-toolbox-btn-active" : ""}`}
+                  onClick={() => setMoveMode((p) => !p)}
+                  title="Mode Geser/Ubah — klik fitur lalu seret untuk memindahkan (titik/garis)"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="5 9 2 12 5 15" />
+                    <polyline points="9 5 12 2 15 5" />
+                    <polyline points="15 19 12 22 9 19" />
+                    <polyline points="19 9 22 12 19 15" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <line x1="12" y1="2" x2="12" y2="22" />
+                  </svg>
+                </button>
+              )}
 
               {isSuperAdmin && (
                 <>
