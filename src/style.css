@@ -52,6 +52,10 @@
   --badge-neutral-fg: #e5e7eb;
   --badge-purple-bg: rgba(168, 85, 247, 0.2);
   --badge-purple-fg: #c4b5fd;
+  --sidebar-bg: linear-gradient(180deg, #0b1426 0%, #0f172a 100%);
+  --dist-hover-1: #1a2634;
+  --dist-total-1: #1b2740;
+  --dist-uptd-1: #1c2838;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
@@ -107,6 +111,10 @@
   --badge-neutral-fg: #334155;
   --badge-purple-bg: rgba(168, 85, 247, 0.14);
   --badge-purple-fg: #7e22ce;
+  --sidebar-bg: var(--bg-soft);
+  --dist-hover-1: #e8edf4;
+  --dist-total-1: #eef4ff;
+  --dist-uptd-1: #eef2f7;
 }
 
 * {
@@ -1331,8 +1339,8 @@ body {
 
 /* ---------- Sidebar ---------- */
 .sidebar {
-  background: linear-gradient(180deg, #0b1426 0%, #0f172a 100%);
-  border-right: 1px solid rgba(148, 163, 184, 0.08);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border-soft-4);
   display: flex;
   flex-direction: column;
   padding: 16px 12px 14px;
@@ -1428,10 +1436,6 @@ body {
   flex-direction: column;
   gap: 10px;
 }
-.sidebar-footer-row {
-  display: flex;
-  gap: 8px;
-}
 .sidebar-user {
   display: flex;
   align-items: center;
@@ -1485,19 +1489,20 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 10px;
+  width: 100%;
+  padding: 9px 10px;
   border-radius: 8px;
   background: rgba(148, 163, 184, 0.05);
   border: 1px solid var(--border-soft-4);
   color: var(--text-muted);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .sidebar-signout:hover {
   background: var(--danger-tint);
   color: var(--danger-soft);
-  border-color: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.25);
 }
 
 /* ---------- Home (Ringkasan) ---------- */
@@ -1956,21 +1961,21 @@ body {
   background: rgba(148, 163, 184, 0.05);
 }
 .dist-table tbody tr:hover td:first-child {
-  background: #1a2634;
+  background: var(--dist-hover-1);
 }
 .dist-total-row td {
   background: rgba(59, 130, 246, 0.08);
   font-weight: 700;
 }
 .dist-total-row td:first-child {
-  background: #1b2740;
+  background: var(--dist-total-1);
 }
 .dist-uptd-row td {
   background: rgba(148, 163, 184, 0.08);
   font-weight: 600;
 }
 .dist-uptd-row td:first-child {
-  background: #1c2838;
+  background: var(--dist-uptd-1);
 }
 .dist-lokasi {
   color: var(--text-muted) !important;

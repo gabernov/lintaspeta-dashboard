@@ -19,6 +19,12 @@ import type {
 
 const FIELD_COLOR = "#f59e0b";
 
+function basemapUrl(): string {
+  const theme = document.documentElement.dataset.theme;
+  const base = theme === "light" ? "light_all" : "dark_all";
+  return `https://basemaps.cartocdn.com/${base}/{z}/{x}/{y}@2x.png`;
+}
+
 type GeoProps = Record<string, unknown>;
 
 /* ------------------------------------------------------------------ */
@@ -425,9 +431,7 @@ export default function DatasetEditor() {
         sources: {
           basemap: {
             type: "raster",
-            tiles: [
-              "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-            ],
+            tiles: [basemapUrl()],
             tileSize: 256,
             attribution: "© OpenStreetMap contributors © CARTO",
           },
@@ -727,6 +731,22 @@ export default function DatasetEditor() {
       mapRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---- switch basemap tiles when theme changes ---- */
+  useEffect(() => {
+    const apply = () => {
+      const src = mapRef.current?.getSource("basemap");
+      if (src && "setTiles" in src) {
+        (src as maplibregl.RasterTileSource).setTiles([basemapUrl()]);
+      }
+    };
+    const mo = new MutationObserver(apply);
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => mo.disconnect();
+  }, []);
 
   /* ---- keep moveMode ref in sync for event handlers ---- */
   useEffect(() => {
