@@ -428,6 +428,7 @@ export default function DatasetEditor() {
       container: mapContainerRef.current,
       style: {
         version: 8,
+        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
         sources: {
           basemap: {
             type: "raster",
@@ -546,6 +547,22 @@ export default function DatasetEditor() {
           },
         });
         map.addLayer({
+          id: "draft-cluster-labels",
+          type: "symbol",
+          source: "draft",
+          filter: ["has", "point_count"],
+          layout: {
+            "text-field": ["get", "point_count"],
+            "text-font": ["Open Sans Semibold"],
+            "text-size": 12,
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": "#0f172a",
+            "text-halo-width": 1.5,
+          },
+        });
+        map.addLayer({
           id: "draft-points",
           type: "circle",
           source: "draft",
@@ -658,28 +675,30 @@ export default function DatasetEditor() {
       }
 
       if (isPoint) {
-        map.on("click", "draft-clusters", (e: maplibregl.MapLayerMouseEvent) => {
-          if (tdRef.current?.enabled) return;
-          const cluster = e.features?.[0];
-          if (!cluster) return;
-          const src = map.getSource("draft") as maplibregl.GeoJSONSource;
-          const clusterId = cluster.properties?.["cluster_id"] as number;
-          void src
-            .getClusterExpansionZoom(clusterId)
-            .then((zoom) => {
-              map.easeTo({
-                center: (cluster.geometry as Point).coordinates as [number, number],
-                zoom,
-              });
-            })
-            .catch(() => {});
-        });
-        map.on("mouseenter", "draft-clusters", () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", "draft-clusters", () => {
-          map.getCanvas().style.cursor = "";
-        });
+        for (const lid of ["draft-clusters", "draft-cluster-labels"]) {
+          map.on("click", lid, (e: maplibregl.MapLayerMouseEvent) => {
+            if (tdRef.current?.enabled) return;
+            const cluster = e.features?.[0];
+            if (!cluster) return;
+            const src = map.getSource("draft") as maplibregl.GeoJSONSource;
+            const clusterId = cluster.properties?.["cluster_id"] as number;
+            void src
+              .getClusterExpansionZoom(clusterId)
+              .then((zoom) => {
+                map.easeTo({
+                  center: (cluster.geometry as Point).coordinates as [number, number],
+                  zoom,
+                });
+              })
+              .catch(() => {});
+          });
+          map.on("mouseenter", lid, () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", lid, () => {
+            map.getCanvas().style.cursor = "";
+          });
+        }
       }
 
       for (const lid of layerIds) {
