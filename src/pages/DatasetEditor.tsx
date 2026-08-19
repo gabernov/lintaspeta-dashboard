@@ -18,6 +18,7 @@ import type {
 } from "geojson";
 
 const FIELD_COLOR = "#f59e0b";
+const POINT_CELL_PX = 28;
 
 function basemapUrl(): string {
   const theme = document.documentElement.dataset.theme;
@@ -176,6 +177,40 @@ export default function DatasetEditor() {
     }
   }, [isPoint]);
 
+  const applyCollisionFilter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !isPoint) return;
+    const src = map.getSource("draft");
+    if (!src || !("setData" in src)) return;
+    const fc = featuresRef.current;
+    if (!fc) return;
+
+    const grid = new Set<string>();
+    const kept: Feature[] = [];
+
+    for (const feat of fc.features) {
+      const g = feat.geometry;
+      if (g.type !== "Point") continue;
+      const p = map.project([g.coordinates[0], g.coordinates[1]]);
+      const cx = Math.floor(p.x / POINT_CELL_PX);
+      const cy = Math.floor(p.y / POINT_CELL_PX);
+      let collides = false;
+      for (let dx = -1; dx <= 1 && !collides; dx++) {
+        for (let dy = -1; dy <= 1 && !collides; dy++) {
+          if (grid.has(`${cx + dx}:${cy + dy}`)) collides = true;
+        }
+      }
+      if (collides) continue;
+      grid.add(`${cx}:${cy}`);
+      kept.push(feat);
+    }
+
+    (src as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: kept,
+    } as FeatureCollection);
+  }, [isPoint]);
+
   const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
     const map = mapRef.current;
     if (!map) return;
@@ -198,7 +233,8 @@ export default function DatasetEditor() {
       }
       hasFittedRef.current = true;
     }
-  }, []);
+    applyCollisionFilter();
+  }, [applyCollisionFilter]);
 
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
@@ -526,15 +562,7 @@ export default function DatasetEditor() {
           id: "draft-points",
           type: "circle",
           source: "draft",
-          minzoom: 8,
           paint: {
-            "circle-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8, 0,
-              10, 1,
-            ],
             "circle-radius": [
               "case",
               ["==", ["get", "_source_type"], "field"],
@@ -676,6 +704,16 @@ export default function DatasetEditor() {
           }
         }
       });
+
+      let lastFilterAt = 0;
+      const onZoomFilter = () => {
+        const now = Date.now();
+        if (now - lastFilterAt < 150) return;
+        lastFilterAt = now;
+        applyCollisionFilter();
+      };
+      map.on("zoom", onZoomFilter);
+      map.on("zoomend", applyCollisionFilter);
 
       initTerraDraw();
 
