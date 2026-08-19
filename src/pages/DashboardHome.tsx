@@ -87,6 +87,7 @@ export default function DashboardHome() {
   const [published, setPublished] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [pivots, setPivots] = useState<Record<string, Record<string, PivotValue[]>>>({});
+  const [expandedPivots, setExpandedPivots] = useState<Record<string, boolean>>({});
   const [dists, setDists] = useState<Record<string, DistributionData>>({});
   const [distTab, setDistTab] = useState<"uptd" | "lokasi">("uptd");
 
@@ -129,7 +130,7 @@ export default function DashboardHome() {
           const groups = data as Record<string, PivotValue[]>;
           const entries: Record<string, PivotValue[]> = {};
           for (const [k, arr] of Object.entries(groups)) {
-            entries[k] = (arr ?? []).slice(0, 6);
+            entries[k] = arr ?? [];
           }
           setPivots((p) => ({ ...p, [d.id]: entries }));
         });
@@ -236,10 +237,13 @@ export default function DashboardHome() {
                   const rows = groups?.[dim.key];
                   if (!rows || rows.length === 0) return null;
                   const max = Math.max(...rows.map((r) => r.count));
+                  const expandKey = `${d.id}:${dim.key}`;
+                  const expanded = !!expandedPivots[expandKey];
+                  const visible = expanded ? rows : rows.slice(0, 6);
                   return (
                     <div className="pivot-dim" key={dim.key}>
                       <div className="pivot-dim-label">{dim.label}</div>
-                      {rows.map((r) => (
+                      {visible.map((r) => (
                         <div className="pivot-row" key={r.value}>
                           <span className="pivot-row-label" title={r.value}>
                             {r.value}
@@ -255,6 +259,18 @@ export default function DashboardHome() {
                           </span>
                         </div>
                       ))}
+                      {rows.length > 6 && (
+                        <button
+                          className="pivot-more"
+                          onClick={() =>
+                            setExpandedPivots((e) => ({ ...e, [expandKey]: !e[expandKey] }))
+                          }
+                        >
+                          {expanded
+                            ? "Sembunyikan"
+                            : `Lihat semua (${rows.length})`}
+                        </button>
+                      )}
                     </div>
                   );
                 })}
