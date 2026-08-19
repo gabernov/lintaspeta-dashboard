@@ -18,7 +18,6 @@ import type {
 } from "geojson";
 
 const FIELD_COLOR = "#f59e0b";
-const POINT_CELL_PX = 28;
 
 function basemapUrl(): string {
   const theme = document.documentElement.dataset.theme;
@@ -177,40 +176,6 @@ export default function DatasetEditor() {
     }
   }, [isPoint]);
 
-  const applyCollisionFilter = useCallback(() => {
-    const map = mapRef.current;
-    if (!map || !isPoint) return;
-    const src = map.getSource("draft");
-    if (!src || !("setData" in src)) return;
-    const fc = featuresRef.current;
-    if (!fc) return;
-
-    const grid = new Set<string>();
-    const kept: Feature[] = [];
-
-    for (const feat of fc.features) {
-      const g = feat.geometry;
-      if (g.type !== "Point") continue;
-      const p = map.project([g.coordinates[0], g.coordinates[1]]);
-      const cx = Math.floor(p.x / POINT_CELL_PX);
-      const cy = Math.floor(p.y / POINT_CELL_PX);
-      let collides = false;
-      for (let dx = -1; dx <= 1 && !collides; dx++) {
-        for (let dy = -1; dy <= 1 && !collides; dy++) {
-          if (grid.has(`${cx + dx}:${cy + dy}`)) collides = true;
-        }
-      }
-      if (collides) continue;
-      grid.add(`${cx}:${cy}`);
-      kept.push(feat);
-    }
-
-    (src as maplibregl.GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features: kept,
-    } as FeatureCollection);
-  }, [isPoint]);
-
   const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
     const map = mapRef.current;
     if (!map) return;
@@ -233,8 +198,7 @@ export default function DatasetEditor() {
       }
       hasFittedRef.current = true;
     }
-    applyCollisionFilter();
-  }, [applyCollisionFilter]);
+  }, []);
 
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
@@ -252,10 +216,10 @@ export default function DatasetEditor() {
     featuresRef.current = fc;
     setInitialLoading(false);
 
-    if (mapRef.current?.isStyleLoaded()) {
+    if (mapRef.current?.getSource("draft")) {
       applyFeaturesToSource(fc);
     }
-  }, [datasetId]);
+  }, [datasetId, applyFeaturesToSource]);
 
   const refreshEditWindow = useCallback(async () => {
     if (!datasetId) return;
@@ -555,13 +519,37 @@ export default function DatasetEditor() {
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
       });
 
       if (isPoint) {
         map.addLayer({
+          id: "draft-clusters",
+          type: "circle",
+          source: "draft",
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-radius": [
+              "step",
+              ["get", "point_count"],
+              14,
+              10, 20,
+              100, 30,
+              1000, 42,
+            ],
+            "circle-color": meta.defaultColor,
+            "circle-opacity": 0.85,
+            "circle-stroke-color": "#0f172a",
+            "circle-stroke-width": 2,
+          },
+        });
+        map.addLayer({
           id: "draft-points",
           type: "circle",
           source: "draft",
+          filter: ["!", ["has", "point_count"]],
           paint: {
             "circle-radius": [
               "case",
@@ -669,6 +657,31 @@ export default function DatasetEditor() {
         });
       }
 
+      if (isPoint) {
+        map.on("click", "draft-clusters", (e: maplibregl.MapLayerMouseEvent) => {
+          if (tdRef.current?.enabled) return;
+          const cluster = e.features?.[0];
+          if (!cluster) return;
+          const src = map.getSource("draft") as maplibregl.GeoJSONSource;
+          const clusterId = cluster.properties?.["cluster_id"] as number;
+          void src
+            .getClusterExpansionZoom(clusterId)
+            .then((zoom) => {
+              map.easeTo({
+                center: (cluster.geometry as Point).coordinates as [number, number],
+                zoom,
+              });
+            })
+            .catch(() => {});
+        });
+        map.on("mouseenter", "draft-clusters", () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "draft-clusters", () => {
+          map.getCanvas().style.cursor = "";
+        });
+      }
+
       for (const lid of layerIds) {
         map.on("mouseenter", lid, () => {
           map.getCanvas().style.cursor = "pointer";
@@ -704,16 +717,6 @@ export default function DatasetEditor() {
           }
         }
       });
-
-      let lastFilterAt = 0;
-      const onZoomFilter = () => {
-        const now = Date.now();
-        if (now - lastFilterAt < 150) return;
-        lastFilterAt = now;
-        applyCollisionFilter();
-      };
-      map.on("zoom", onZoomFilter);
-      map.on("zoomend", applyCollisionFilter);
 
       initTerraDraw();
 
