@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DATASETS } from "../lib/datasets";
+import { applyTheme, getInitialTheme, isSystemMode, type ThemeMode } from "../lib/theme";
 
 function initials(name: string | null | undefined) {
   if (!name) return "·";
@@ -16,6 +17,27 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem("sidebar_collapsed") === "1";
   });
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+
+  useEffect(() => {
+    if (!isSystemMode()) return;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = (e: MediaQueryListEvent) => {
+      const t: ThemeMode = e.matches ? "light" : "dark";
+      document.documentElement.dataset.theme = t;
+      setTheme(t);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((t) => {
+      const next = t === "dark" ? "light" : "dark";
+      applyTheme(next);
+      return next;
+    });
+  };
 
   const toggleSidebar = () => {
     setCollapsed((c) => {
@@ -97,28 +119,44 @@ export default function AppShell() {
                 </div>
               </div>
             </div>
-            <button className="sidebar-signout" onClick={handleSignOut}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              <span>Keluar</span>
-            </button>
+            <div className="sidebar-footer-row">
+              <button className="sidebar-signout" onClick={handleSignOut}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Keluar</span>
+              </button>
+            </div>
           </div>
         </aside>
       )}
 
       <main className="content">
-        <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? "Buka menu" : "Tutup menu"} aria-label="Toggle sidebar">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {collapsed ? (
-              <polyline points="9 18 15 12 9 6" />
+        <div className="content-topbar">
+          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? "Buka menu" : "Tutup menu"} aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {collapsed ? (
+                <polyline points="9 18 15 12 9 6" />
+              ) : (
+                <polyline points="15 18 9 12 15 6" />
+              )}
+            </svg>
+          </button>
+          <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
+            {theme === "dark" ? (
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
             ) : (
-              <polyline points="15 18 9 12 15 6" />
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
             )}
-          </svg>
-        </button>
+          </button>
+        </div>
         <Outlet />
       </main>
     </div>
