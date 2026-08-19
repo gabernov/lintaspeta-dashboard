@@ -126,7 +126,7 @@ export default function DatasetEditor() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hasFittedRef = useRef(false);
   const featuresRef = useRef<FeatureCollection | null>(null);
-  const moveModeRef = useRef(false);
+  const activeToolRef = useRef<"select" | "pan" | "draw">("select");
   const dragRef = useRef<{
     featureId: string;
     startLngLat: { lng: number; lat: number };
@@ -140,7 +140,9 @@ export default function DatasetEditor() {
   });
   const [editWindow, setEditWindow] = useState<EditWindow | null>(null);
   const [fieldMode, setFieldMode] = useState(false);
-  const [moveMode, setMoveMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<"select" | "pan" | "draw">(
+    "select"
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "update">("create");
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -174,6 +176,7 @@ export default function DatasetEditor() {
       tdRef.current.clear();
       tdRef.current.setMode(isPoint ? "point" : "linestring");
     }
+    setActiveTool("draw");
   }, [isPoint]);
 
   const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
@@ -617,67 +620,11 @@ export default function DatasetEditor() {
       }
 
       const layerIds = isPoint ? ["draft-points"] : ["draft-lines"];
-      const buildPopupHtml = (props: GeoProps | null): string => {
-        if (!props) return "";
-        const rows: string[] = [];
-        const fields = meta.formFields.slice(0, 5);
-        for (const f of fields) {
-          const v = props[f.key];
-          if (v != null && v !== "") {
-            rows.push(
-              `<div class="ed-popup-row"><span class="ed-popup-key">${f.label}</span><span class="ed-popup-val">${String(v)}</span></div>`
-            );
-          }
-        }
-        if (props._status) {
-          rows.push(
-            `<div class="ed-popup-row"><span class="ed-popup-key">Status</span><span class="ed-popup-val ed-badge ed-badge-status">${String(props._status)}</span></div>`
-          );
-        }
-        if (props._region) {
-          rows.push(
-            `<div class="ed-popup-row"><span class="ed-popup-key">${meta.regionLabel}</span><span class="ed-popup-val">${String(props._region)}</span></div>`
-          );
-        }
-        return `<div class="ed-popup">${rows.join("")}</div>`;
-      };
-
-      for (const lid of layerIds) {
-        map.on("click", lid, (e: maplibregl.MapLayerMouseEvent) => {
-          if (!e.features?.length) return;
-          if (tdRef.current?.enabled) return;
-
-          const feat = e.features[0] as unknown as Feature;
-          const coords =
-            feat.geometry.type === "Point"
-              ? (feat.geometry as Point).coordinates
-              : feat.geometry.type === "LineString"
-                ? (feat.geometry as LineString).coordinates[0]
-                : [e.lngLat.lng, e.lngLat.lat];
-
-          closePopup();
-          void fetchFeatureDetail(resolveDraftId(feat)).then((full) => {
-            const props = (full?.properties ?? feat.properties) as GeoProps | null;
-            popupRef.current
-              ?.setLngLat(coords as [number, number])
-              .setHTML(buildPopupHtml(props))
-              .addTo(map);
-          });
-
-          popupRef.current?.on("close", () => {
-            if (formMode === "update" && selectedFeature?.id === feat.id) {
-              setFormOpen(false);
-              setSelectedFeature(null);
-              setFormMode("create");
-            }
-          });
-        });
-      }
 
       if (isPoint) {
         for (const lid of ["draft-clusters", "draft-cluster-labels"]) {
           map.on("click", lid, (e: maplibregl.MapLayerMouseEvent) => {
-            if (tdRef.current?.enabled) return;
+            if (activeToolRef.current !== "select") return;
             const cluster = e.features?.[0];
             if (!cluster) return;
             const src = map.getSource("draft") as maplibregl.GeoJSONSource;
@@ -693,30 +640,35 @@ export default function DatasetEditor() {
               .catch(() => {});
           });
           map.on("mouseenter", lid, () => {
+            if (activeToolRef.current !== "select") return;
             map.getCanvas().style.cursor = "pointer";
           });
           map.on("mouseleave", lid, () => {
-            map.getCanvas().style.cursor = "";
+            if (activeToolRef.current === "pan") map.getCanvas().style.cursor = "grab";
+            else if (activeToolRef.current === "draw") map.getCanvas().style.cursor = "crosshair";
+            else map.getCanvas().style.cursor = "";
           });
         }
       }
 
       for (const lid of layerIds) {
         map.on("mouseenter", lid, () => {
+          if (activeToolRef.current !== "select") return;
           map.getCanvas().style.cursor = "pointer";
         });
         map.on("mouseleave", lid, () => {
-          map.getCanvas().style.cursor = "";
+          if (activeToolRef.current === "pan") map.getCanvas().style.cursor = "grab";
+          else if (activeToolRef.current === "draw") map.getCanvas().style.cursor = "crosshair";
+          else map.getCanvas().style.cursor = "";
         });
       }
 
       map.on("dblclick", (e: maplibregl.MapMouseEvent) => {
-        if (tdRef.current?.enabled) return;
-        e.preventDefault();
+        if (activeToolRef.current === "draw") e.preventDefault();
       });
 
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        if (tdRef.current?.enabled) return;
+        if (activeToolRef.current !== "select") return;
         const clickedOnFeature = map.queryRenderedFeatures(e.point, {
           layers: layerIds,
         });
@@ -816,23 +768,49 @@ export default function DatasetEditor() {
     return () => mo.disconnect();
   }, []);
 
-  /* ---- keep moveMode ref in sync for event handlers ---- */
+  /* ---- keep activeTool ref in sync for event handlers ---- */
   useEffect(() => {
-    moveModeRef.current = moveMode;
-  }, [moveMode]);
+    activeToolRef.current = activeTool;
+  }, [activeTool]);
 
-  /* ---- sync terra-draw mode with canDraw ---- */
+  /* ---- system cursor per tool (Excalidraw-style) ---- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const canvas = map.getCanvas();
+    const applyCursor = () => {
+      if (activeTool === "pan") canvas.style.cursor = "grab";
+      else if (activeTool === "draw") canvas.style.cursor = "crosshair";
+      else canvas.style.cursor = "";
+    };
+    applyCursor();
+    if (activeTool !== "pan") return;
+    const onDown = () => {
+      canvas.style.cursor = "grabbing";
+    };
+    const onUp = () => {
+      canvas.style.cursor = "grab";
+    };
+    map.on("mousedown", onDown);
+    map.on("mouseup", onUp);
+    map.on("mouseout", onUp);
+    return () => {
+      map.off("mousedown", onDown);
+      map.off("mouseup", onUp);
+      map.off("mouseout", onUp);
+    };
+  }, [activeTool]);
+
+  /* ---- sync terra-draw mode with activeTool ---- */
   useEffect(() => {
     if (tdRef.current && meta) {
-      if (moveMode) {
-        tdRef.current.setMode("static");
-      } else if (canDraw) {
+      if (activeTool === "draw" && canDraw) {
         tdRef.current.setMode(isPoint ? "point" : "linestring");
       } else {
         tdRef.current.setMode("static");
       }
     }
-  }, [canDraw, meta, isPoint, moveMode]);
+  }, [activeTool, canDraw, meta, isPoint]);
 
   /* ---- initial data fetch ---- */
   useEffect(() => {
@@ -916,7 +894,7 @@ export default function DatasetEditor() {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !meta || !moveMode) return;
+    if (!map || !meta || activeTool !== "select") return;
 
     const layerId = isPoint ? "draft-points" : "draft-lines";
     const previewPointLayer = "drag-preview-point";
@@ -969,7 +947,7 @@ export default function DatasetEditor() {
     };
 
     const onMouseDown = (e: maplibregl.MapMouseEvent) => {
-      if (!moveModeRef.current) return;
+      if (activeToolRef.current !== "select") return;
       const feats = map.queryRenderedFeatures(e.point, { layers: [layerId] });
       if (!feats.length) return;
       const feat = feats[0] as unknown as Feature;
@@ -1020,7 +998,7 @@ export default function DatasetEditor() {
       map.dragPan.enable();
       map.getCanvas().style.cursor = "";
     };
-  }, [meta, isPoint, moveMode, persistMovedFeature, resolveDraftId]);
+  }, [meta, isPoint, activeTool, persistMovedFeature, resolveDraftId]);
 
   useEffect(() => {
     if (!mapRef.current || !meta) return;
@@ -1029,14 +1007,11 @@ export default function DatasetEditor() {
     const layerId = isPoint ? "draft-points" : "draft-lines";
     const handler = (e: maplibregl.MapLayerMouseEvent) => {
       if (!e.features?.length) return;
-      if (tdRef.current?.enabled) return;
-      if (moveModeRef.current) return;
+      if (activeToolRef.current !== "select") return;
       handleFeatureClick(e.features[0] as unknown as Feature);
     };
 
-    if (map.getLayer(layerId)) {
-      map.on("click", layerId, handler);
-    }
+    map.on("click", layerId, handler);
     return () => {
       map.off("click", layerId, handler);
     };
@@ -1079,11 +1054,53 @@ export default function DatasetEditor() {
           {/* ---- Floating Toolbox ---- */}
           {(isSuperAdmin || isEditor) && (
             <div className="ed-toolbox">
+              <button
+                className={`ed-toolbox-btn${activeTool === "select" ? " ed-toolbox-btn-active" : ""}`}
+                onClick={() => setActiveTool("select")}
+                title="Pilih (cursor) — klik fitur untuk edit/hapus, seret untuk pindah"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
+                  <path d="M11.07 11.07l4.24 4.24" />
+                </svg>
+              </button>
+
+              <button
+                className={`ed-toolbox-btn${activeTool === "pan" ? " ed-toolbox-btn-active" : ""}`}
+                onClick={() => setActiveTool("pan")}
+                title="Geser peta (tangan) — seret untuk memindahkan peta"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+                  <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+                  <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+                  <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+                </svg>
+              </button>
+
               {canDraw && (
                 <button
-                  className="ed-toolbox-btn"
+                  className={`ed-toolbox-btn${activeTool === "draw" ? " ed-toolbox-btn-active" : ""}`}
                   onClick={handleStartDraw}
-                  title={isPoint ? "+ Titik" : "+ Garis"}
+                  title={isPoint ? "Tambah titik" : "Tambah garis"}
                 >
                   <svg
                     width="18"
@@ -1100,6 +1117,8 @@ export default function DatasetEditor() {
                   </svg>
                 </button>
               )}
+
+              <div className="ed-toolbox-divider" />
 
               <button
                 className={`ed-toolbox-btn${fieldMode ? " ed-toolbox-btn-active" : ""}`}
@@ -1120,32 +1139,6 @@ export default function DatasetEditor() {
                   <circle cx="12" cy="9" r="2.5" />
                 </svg>
               </button>
-
-              {canDraw && (
-                <button
-                  className={`ed-toolbox-btn${moveMode ? " ed-toolbox-btn-active" : ""}`}
-                  onClick={() => setMoveMode((p) => !p)}
-                  title="Mode Geser/Ubah — klik fitur lalu seret untuk memindahkan (titik/garis)"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="5 9 2 12 5 15" />
-                    <polyline points="9 5 12 2 15 5" />
-                    <polyline points="15 19 12 22 9 19" />
-                    <polyline points="19 9 22 12 19 15" />
-                    <line x1="2" y1="12" x2="22" y2="12" />
-                    <line x1="12" y1="2" x2="12" y2="22" />
-                  </svg>
-                </button>
-              )}
 
               {isSuperAdmin && (
                 <>
@@ -1297,7 +1290,7 @@ export default function DatasetEditor() {
                 <h3 className="ed-empty-state-title">Belum ada data</h3>
                 <p className="ed-empty-state-text">
                   Klik &ldquo;
-                  {isPoint ? "+ Titik" : "+ Garis"}
+                  {isPoint ? "Tambah titik" : "Tambah garis"}
                   &rdquo; untuk menambah fitur pertama.
                 </p>
               </div>
