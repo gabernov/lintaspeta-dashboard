@@ -526,7 +526,15 @@ export default function DatasetEditor() {
           id: "draft-points",
           type: "circle",
           source: "draft",
+          minzoom: 8,
           paint: {
+            "circle-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              8, 0,
+              10, 1,
+            ],
             "circle-radius": [
               "case",
               ["==", ["get", "_source_type"], "field"],
