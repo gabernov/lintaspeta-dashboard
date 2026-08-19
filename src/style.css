@@ -1729,9 +1729,38 @@ body {
 }
 
 /* Distribusi Data per UPTD & Lokasi */
+.dist-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .dist-tabs {
   display: flex;
   gap: 6px;
+}
+.dist-max-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.dist-max-btn:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text);
+}
+.dist-max-btn-on {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
 }
 .dist-tab {
   font-size: 12px;
@@ -1759,6 +1788,9 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 14px;
   background: rgba(30, 41, 59, 0.4);
+}
+.dist-table-wrap.dist-max {
+  max-height: none;
 }
 .dist-table {
   width: 100%;

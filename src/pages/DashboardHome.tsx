@@ -57,6 +57,13 @@ interface DistributionData {
   uptd_kab: UptdKabRow[];
 }
 
+interface KondisiRow {
+  uptd: string;
+  kab: string;
+  kondisi: string;
+  count: number;
+}
+
 const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }>> = {
   apj: [
     { key: "UPTD", label: "UPTD" },
@@ -89,7 +96,9 @@ export default function DashboardHome() {
   const [pivots, setPivots] = useState<Record<string, Record<string, PivotValue[]>>>({});
   const [expandedPivots, setExpandedPivots] = useState<Record<string, boolean>>({});
   const [dists, setDists] = useState<Record<string, DistributionData>>({});
-  const [distTab, setDistTab] = useState<"uptd" | "lokasi">("uptd");
+  const [kondisi, setKondisi] = useState<KondisiRow[]>([]);
+  const [distTab, setDistTab] = useState<"uptd" | "lokasi" | "kondisi">("uptd");
+  const [distMax, setDistMax] = useState(false);
 
   useEffect(() => {
     supabase.from("edit_windows").select("*").then(({ data }) => {
@@ -146,6 +155,12 @@ export default function DashboardHome() {
           setDists((p) => ({ ...p, [d.id]: data as DistributionData }));
         });
     }
+    supabase
+      .rpc("dataset_kondisi_uptd_kab", { p_dataset: "apj" })
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setKondisi((data as KondisiRow[]) ?? []);
+      });
   }, []);
 
   const totalDraft = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -283,22 +298,44 @@ export default function DashboardHome() {
       <section className="home-section">
         <div className="home-section-head">
           <h2>Distribusi Data per UPTD &amp; Lokasi</h2>
-          <div className="dist-tabs">
+          <div className="dist-head-actions">
+            <div className="dist-tabs">
+              <button
+                className={`dist-tab${distTab === "uptd" ? " dist-tab-active" : ""}`}
+                onClick={() => setDistTab("uptd")}
+              >
+                Per UPTD &amp; Lokasi
+              </button>
+              <button
+                className={`dist-tab${distTab === "lokasi" ? " dist-tab-active" : ""}`}
+                onClick={() => setDistTab("lokasi")}
+              >
+                Per Lokasi
+              </button>
+              <button
+                className={`dist-tab${distTab === "kondisi" ? " dist-tab-active" : ""}`}
+                onClick={() => setDistTab("kondisi")}
+              >
+                Kondisi PJU
+              </button>
+            </div>
             <button
-              className={`dist-tab${distTab === "uptd" ? " dist-tab-active" : ""}`}
-              onClick={() => setDistTab("uptd")}
+              className={`dist-max-btn${distMax ? " dist-max-btn-on" : ""}`}
+              onClick={() => setDistMax((m) => !m)}
+              title={distMax ? "Perkecil tabel" : "Tampilkan semua baris"}
             >
-              Per UPTD &amp; Lokasi
-            </button>
-            <button
-              className={`dist-tab${distTab === "lokasi" ? " dist-tab-active" : ""}`}
-              onClick={() => setDistTab("lokasi")}
-            >
-              Per Lokasi
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {distMax ? (
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                ) : (
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                )}
+              </svg>
+              <span>{distMax ? "Perkecil" : "Maximize"}</span>
             </button>
           </div>
         </div>
-        <DistributionTable dists={dists} tab={distTab} />
+        <DistributionTable dists={dists} kondisi={kondisi} tab={distTab} max={distMax} />
       </section>
 
       {role === "super_admin" && (
@@ -334,14 +371,114 @@ const UPTD_MAP: Record<string, string> = {
 
 function DistributionTable({
   dists,
+  kondisi,
   tab,
+  max,
 }: {
   dists: Record<string, DistributionData>;
-  tab: "uptd" | "lokasi";
+  kondisi: KondisiRow[];
+  tab: "uptd" | "lokasi" | "kondisi";
+  max: boolean;
 }) {
   const cell = (val?: number) =>
     val != null && val > 0 ? val.toLocaleString("id-ID") : "—";
   const norm = (s: string) => s.trim().toUpperCase().replace(/\s+/g, "");
+
+  const KONDISI_ORDER = ["Baik", "Rusak Ringan", "Rusak Berat", "Rusak", "Mati"];
+  const kondStyle = (k: string): React.CSSProperties => {
+    if (k === "Baik") return { color: "var(--ok)" };
+    if (k === "Rusak Ringan" || k === "Rusak") return { color: "var(--warn)" };
+    return { color: "var(--danger)" };
+  };
+  const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
+
+  if (tab === "kondisi") {
+    const rows = kondisi;
+    const kondisiKeys = [...new Set(rows.map((r) => r.kondisi))].sort(
+      (a, b) => {
+        const ia = KONDISI_ORDER.indexOf(a);
+        const ib = KONDISI_ORDER.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      }
+    );
+    const sum = (uptd: string | null, kab: string | null, key: string) =>
+      rows
+        .filter(
+          (r) =>
+            (uptd === null || (UPTD_MAP[r.uptd] ?? r.uptd) === uptd) &&
+            (kab === null || norm(r.kab) === norm(kab)) &&
+            r.kondisi === key
+        )
+        .reduce((a, r) => a + r.count, 0);
+    const sumAll = (uptd: string | null, kab: string | null) =>
+      rows
+        .filter(
+          (r) =>
+            (uptd === null || (UPTD_MAP[r.uptd] ?? r.uptd) === uptd) &&
+            (kab === null || norm(r.kab) === norm(kab))
+        )
+        .reduce((a, r) => a + r.count, 0);
+    return (
+      <div className={`dist-table-wrap${max ? " dist-max" : ""}`}>
+        <table className="dist-table">
+          <thead>
+            <tr>
+              <th>UPTD / Lokasi</th>
+              {kondisiKeys.map((k) => (
+                <th key={k}>{k}</th>
+              ))}
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="dist-total-row">
+              <td>Dishub Jabar</td>
+              {kondisiKeys.map((k) => (
+                <td key={k} style={kondStyle(k)}>
+                  {cell(sum(null, null, k))}
+                </td>
+              ))}
+              <td>{cell(sumAll(null, null))}</td>
+            </tr>
+            {uptdOrder.map((uptd) => {
+              const kabSet = new Map<string, string>();
+              for (const r of rows) {
+                if ((UPTD_MAP[r.uptd] ?? r.uptd) !== uptd) continue;
+                if (!kabSet.has(norm(r.kab))) kabSet.set(norm(r.kab), r.kab);
+              }
+              const kabRows = Array.from(kabSet.values()).sort((a, b) =>
+                a.localeCompare(b, "id")
+              );
+              return (
+                <Fragment key={uptd}>
+                  <tr className="dist-uptd-row">
+                    <td>{uptd}</td>
+                    {kondisiKeys.map((k) => (
+                      <td key={k} style={kondStyle(k)}>
+                        {cell(sum(uptd, null, k))}
+                      </td>
+                    ))}
+                    <td>{cell(sumAll(uptd, null))}</td>
+                  </tr>
+                  {kabRows.map((kab) => (
+                    <tr key={`${uptd}-${norm(kab)}`}>
+                      <td className="dist-lokasi">⊔ {kab}</td>
+                      {kondisiKeys.map((k) => (
+                        <td key={k} style={kondStyle(k)}>
+                          {cell(sum(uptd, kab, k))}
+                        </td>
+                      ))}
+                      <td>{cell(sumAll(uptd, kab))}</td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   if (tab === "lokasi") {
     const apjKab = dists.apj?.kab ?? [];
@@ -360,7 +497,7 @@ function DistributionTable({
     const sklMap = new Map(sklKab.map((k) => [norm(k.value), k.count]));
     const ruasMap = new Map(ruasKab.map((k) => [norm(k.value), k.count]));
     return (
-      <div className="dist-table-wrap">
+      <div className={`dist-table-wrap${max ? " dist-max" : ""}`}>
         <table className="dist-table">
           <thead>
             <tr>
@@ -403,9 +540,8 @@ function DistributionTable({
   const apjUptdKab = dists.apj?.uptd_kab ?? [];
   const sklUptdKab = dists.sekolah?.uptd_kab ?? [];
   const ruasUptdKab = dists.ruas_jalan?.uptd_kab ?? [];
-  const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
   return (
-    <div className="dist-table-wrap">
+    <div className={`dist-table-wrap${max ? " dist-max" : ""}`}>
       <table className="dist-table">
         <thead>
           <tr>
