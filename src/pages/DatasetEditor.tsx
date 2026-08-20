@@ -1694,28 +1694,29 @@ export default function DatasetEditor() {
               Memuat data&hellip;
             </div>
           )}
-        </div>
 
-        {formOpen && (
-          <AttributeForm
-            meta={meta}
-            feature={formMode === "update" ? selectedFeature : null}
-            mode={formMode}
-            canEdit={isSuperAdmin || (isEditor && (editWindow?.open ?? false))}
-            canDelete={isSuperAdmin || isEditor}
-            onSave={handleSave}
-            onDelete={handleDelete}
-            onClose={() => {
-              setFormOpen(false);
-              setSelectedFeature(null);
-              setPendingGeometry(null);
-              setFormMode("create");
-              tdRef.current?.clear();
-              closePopup();
-            }}
-            saving={saving}
-          />
-        )}
+          {/* ---- Floating form panel (right of toolbox) ---- */}
+          {formOpen && (
+            <AttributeForm
+              meta={meta}
+              feature={formMode === "update" ? selectedFeature : null}
+              mode={formMode}
+              canEdit={isSuperAdmin || (isEditor && (editWindow?.open ?? false))}
+              canDelete={isSuperAdmin || isEditor}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onClose={() => {
+                setFormOpen(false);
+                setSelectedFeature(null);
+                setPendingGeometry(null);
+                setFormMode("create");
+                tdRef.current?.clear();
+                closePopup();
+              }}
+              saving={saving}
+            />
+          )}
+        </div>
       </div>
 
       {/* -------- toast -------- */}

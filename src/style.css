@@ -665,12 +665,23 @@ body {
   height: 100%;
 }
 
-/* Side Panel */
+/* Side Panel — floating card over the map, left of the top-right toolbox */
 .ed-panel {
+  position: absolute;
+  top: 12px;
+  right: 64px; /* toolbox occupies right:12px + ~48px */
+  z-index: 6;
   width: 340px;
-  min-width: 340px;
-  background: var(--bg-soft);
-  border-left: 1px solid var(--border);
+  max-width: calc(100% - 76px);
+  max-height: calc(100% - 24px);
+  background: var(--glass-panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-soft-3);
+  border-radius: 14px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -1062,24 +1073,26 @@ body {
   background: rgba(15, 23, 42, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.25);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  color: var(--text);
+  color: #e2e8f0;
   font-size: 13px;
 }
 .ed-selection-count {
   font-weight: 600;
+  color: #f1f5f9;
 }
 .ed-selection-btn {
   padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: transparent;
-  color: var(--text);
+  color: #e2e8f0;
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 .ed-selection-btn:hover {
   background: rgba(148, 163, 184, 0.15);
+  color: #ffffff;
 }
 .ed-selection-btn-del {
   border-color: rgba(239, 68, 68, 0.45);
@@ -1087,6 +1100,7 @@ body {
 }
 .ed-selection-btn-del:hover {
   background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
 }
 .ed-selection-btn:disabled {
   opacity: 0.5;
