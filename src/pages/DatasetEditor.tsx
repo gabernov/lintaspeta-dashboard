@@ -132,6 +132,25 @@ function rebuildLineGeom(g: LineGeom, coords: [number, number][]): LineGeom {
   return { type: "MultiLineString", coordinates: [coords] };
 }
 
+// Dense lines (ruas_jalan has 900+ vertices) would render every handle as a
+// solid white band on top of the line — a phantom "second line". Sample evenly
+// past a cap while keeping the real vertex index so dragging still targets the
+// correct vertex.
+const MAX_VERTEX_HANDLES = 80;
+
+function sampleVertices(
+  coords: [number, number][]
+): { c: [number, number]; i: number }[] {
+  if (coords.length <= MAX_VERTEX_HANDLES) {
+    return coords.map((c, i) => ({ c, i }));
+  }
+  const step = (coords.length - 1) / (MAX_VERTEX_HANDLES - 1);
+  return Array.from({ length: MAX_VERTEX_HANDLES }, (_, k) => {
+    const i = Math.round(k * step);
+    return { c: coords[i], i };
+  });
+}
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -145,6 +164,7 @@ export default function DatasetEditor() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hasFittedRef = useRef(false);
   const featuresRef = useRef<FeatureCollection | null>(null);
+  const publishedFCRef = useRef<FeatureCollection | null>(null);
   const activeToolRef = useRef<"select" | "pan" | "draw">("select");
   const dragRef = useRef<{
     featureId: string;
@@ -162,6 +182,7 @@ export default function DatasetEditor() {
     startLngLat: { lng: number; lat: number };
   } | null>(null);
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const selectedFeatureRef = useRef<Feature | null>(null);
 
   /* ---- state ---- */
   const [features, setFeatures] = useState<FeatureCollection>({
@@ -214,6 +235,14 @@ export default function DatasetEditor() {
   const handleStartDraw = useCallback((target: "point" | "line") => {
     drawTargetRef.current = target;
     setDrawTarget(target);
+    // Exit any active edit session (form + vertex handles) so drawing starts
+    // clean. Otherwise the stale edit form / dense vertex handles stay on top
+    // of the map and block drawing the new feature.
+    setFormOpen(false);
+    setSelectedFeature(null);
+    setPendingGeometry(null);
+    setFormMode("create");
+    setSelectedIds([]);
     if (tdRef.current) {
       tdRef.current.clear();
       tdRef.current.setMode(target === "point" ? "point" : "linestring");
@@ -252,6 +281,33 @@ export default function DatasetEditor() {
     }
   }, []);
 
+  const applyPublishedFilter = useCallback(() => {
+    const map = mapRef.current;
+    const published = publishedFCRef.current;
+    const draft = featuresRef.current;
+    if (!map || !published || !draft) return;
+    const src = map.getSource("roads-bg");
+    if (!src || !("setData" in src)) return;
+    // Hide the grey published version of any line that has a pending draft
+    // edit — otherwise the old and new geometries render side by side ("2 lines").
+    const edited = new Set<string>();
+    for (const f of draft.features) {
+      const p = f.properties as Record<string, unknown> | null;
+      if (p && p._status === "pending" && typeof p._source_id === "string") {
+        edited.add(p._source_id);
+      }
+    }
+    if (edited.size === 0) return;
+    const filtered: FeatureCollection = {
+      type: "FeatureCollection",
+      features: published.features.filter((f) => {
+        const sid = (f.properties as Record<string, unknown> | null)?._source_id;
+        return typeof sid !== "string" || !edited.has(sid);
+      }),
+    };
+    (src as maplibregl.GeoJSONSource).setData(filtered);
+  }, []);
+
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
     const { data, error } = await supabase.rpc("draft_features_geojson", {
@@ -271,7 +327,8 @@ export default function DatasetEditor() {
     if (mapRef.current?.getSource("draft")) {
       applyFeaturesToSource(fc);
     }
-  }, [datasetId, applyFeaturesToSource]);
+    applyPublishedFilter();
+  }, [datasetId, applyFeaturesToSource, applyPublishedFilter]);
 
   const refreshEditWindow = useCallback(async () => {
     if (!datasetId) return;
@@ -300,25 +357,38 @@ export default function DatasetEditor() {
   );
 
   const toggleWindow = useCallback(async () => {
-    if (!editWindow || !datasetId) return;
-    const next = !editWindow.open;
+    if (!datasetId) return;
+    const next = !editWindow?.open;
+    const now = new Date().toISOString();
+    // Upsert on the dataset PK so the first "Buka" inserts the row and
+    // subsequent toggles update it — no duplicate-key error.
     const { error } = await supabase
       .from("edit_windows")
-      .update({
-        open: next,
-        opened_by: profile?.id,
-        opened_at: new Date().toISOString(),
-      })
-      .eq("dataset", datasetId);
+      .upsert(
+        {
+          dataset: datasetId,
+          open: next,
+          opened_by: profile?.id,
+          opened_at: now,
+        },
+        { onConflict: "dataset" }
+      );
     if (error) {
       showToast("Gagal mengubah jendela edit: " + error.message, false);
       return;
     }
-    setEditWindow((prev) => (prev ? { ...prev, open: next } : prev));
-    showToast(
-      next ? "Jendela edit dibuka" : "Jendela edit ditutup",
-      true
+    setEditWindow((prev) =>
+      prev
+        ? { ...prev, open: next }
+        : {
+            dataset: datasetId as EditWindow["dataset"],
+            open: next,
+            opened_by: profile?.id ?? null,
+            opened_at: now,
+            note: null,
+          }
     );
+    showToast(next ? "Jendela edit dibuka" : "Jendela edit ditutup", true);
   }, [editWindow, datasetId, profile?.id, showToast]);
 
   const handleSave = useCallback(
@@ -582,8 +652,10 @@ export default function DatasetEditor() {
         void supabase
           .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
           .then(({ data }) => {
+            if (!data) return;
+            publishedFCRef.current = data as FeatureCollection;
             const src = map.getSource("roads-bg");
-            if (src && "setData" in src && data) {
+            if (src && "setData" in src) {
               (src as maplibregl.GeoJSONSource).setData(
                 data as FeatureCollection
               );
@@ -793,16 +865,12 @@ export default function DatasetEditor() {
         setSelectedIds([]);
         closePopup();
 
-        if (formMode === "update" && selectedFeature) {
-          const featId = String(selectedFeature.id);
-          const stillVisible = features.features.some(
-            (f) => String(f.id) === featId
-          );
-          if (!stillVisible) {
-            setFormOpen(false);
-            setSelectedFeature(null);
-            setFormMode("create");
-          }
+        // Empty-map click always ends the edit session; this handler is
+        // registered once at mount so it reads the live selection via ref.
+        if (selectedFeatureRef.current) {
+          setFormOpen(false);
+          setSelectedFeature(null);
+          setFormMode("create");
         }
       });
 
@@ -859,6 +927,11 @@ export default function DatasetEditor() {
             setFormMode("create");
             setSelectedFeature(null);
             setFormOpen(true);
+            // Keep the just-drawn feature rendered while the create form is
+            // open — clear() here makes it vanish the instant the user
+            // double-clicks, which reads as "line hilang, tidak teregister".
+            td.setMode("static");
+            return;
           }
           td.clear();
         }
@@ -894,6 +967,11 @@ export default function DatasetEditor() {
   useEffect(() => {
     activeToolRef.current = activeTool;
   }, [activeTool]);
+
+  /* ---- keep selectedFeature ref in sync for mount-time handlers ---- */
+  useEffect(() => {
+    selectedFeatureRef.current = selectedFeature;
+  }, [selectedFeature]);
 
   /* ---- keep drawTarget ref in sync ---- */
   useEffect(() => {
@@ -1044,9 +1122,10 @@ export default function DatasetEditor() {
     const setVertices = (coords: [number, number][]) => {
       const vsrc = map.getSource("line-edit-vertices") as maplibregl.GeoJSONSource;
       if (vsrc) {
+        const visible = sampleVertices(coords);
         vsrc.setData({
           type: "FeatureCollection",
-          features: coords.map((c, i) => ({
+          features: visible.map(({ c, i }) => ({
             type: "Feature",
             geometry: { type: "Point", coordinates: c },
             properties: { vi: i },
@@ -1221,13 +1300,22 @@ export default function DatasetEditor() {
         );
         const fc = featuresRef.current;
         if (fc) {
-          setDraftData({
+          const updated = {
             ...fc,
             features: fc.features.map((f) =>
-              String(f.id) === v.featureId ? { ...f, geometry: newGeom } : f
+              String(f.id) === v.featureId
+                ? { ...f, geometry: newGeom }
+                : f
             ),
-          });
+          };
+          setDraftData(updated);
+          featuresRef.current = updated;
         }
+        setSelectedFeature((prev) =>
+          prev && String(prev.id) === v.featureId
+            ? { ...prev, geometry: newGeom }
+            : prev
+        );
         void persistMovedFeature(v.featureId, newGeom);
         return;
       }
@@ -1248,13 +1336,22 @@ export default function DatasetEditor() {
         const newGeom = translateGeometry(d.origGeom, dLng, dLat);
         const fc = featuresRef.current;
         if (fc) {
-          setDraftData({
+          const updated = {
             ...fc,
             features: fc.features.map((f) =>
-              String(f.id) === d.featureId ? { ...f, geometry: newGeom } : f
+              String(f.id) === d.featureId
+                ? { ...f, geometry: newGeom }
+                : f
             ),
-          });
+          };
+          setDraftData(updated);
+          featuresRef.current = updated;
         }
+        setSelectedFeature((prev) =>
+          prev && String(prev.id) === d.featureId
+            ? { ...prev, geometry: newGeom }
+            : prev
+        );
         void persistMovedFeature(d.featureId, newGeom);
         return;
       }
@@ -1344,9 +1441,10 @@ export default function DatasetEditor() {
       return;
     }
     const coords = lineCoords(selectedFeature!.geometry as LineGeom);
+    const visible = sampleVertices(coords);
     src.setData({
       type: "FeatureCollection",
-      features: coords.map((c, i) => ({
+      features: visible.map(({ c, i }) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: c },
         properties: { vi: i },
@@ -1451,17 +1549,11 @@ export default function DatasetEditor() {
                 </svg>
               </button>
 
-              {canDraw && (
-                <>
+              {canDraw && isPoint && (
                 <button
                   className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "point" ? " ed-toolbox-btn-active" : ""}`}
                   onClick={() => handleStartDraw("point")}
-                  disabled={!isPoint}
-                  title={
-                    isPoint
-                      ? "Tambah titik"
-                      : "Tambah titik — nonaktif untuk peta ruas jalan"
-                  }
+                  title="Tambah titik"
                 >
                   <svg
                     width="18"
@@ -1477,15 +1569,12 @@ export default function DatasetEditor() {
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 </button>
+              )}
+              {canDraw && !isPoint && (
                 <button
                   className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "line" ? " ed-toolbox-btn-active" : ""}`}
                   onClick={() => handleStartDraw("line")}
-                  disabled={isPoint}
-                  title={
-                    isPoint
-                      ? "Tambah garis — nonaktif untuk peta titik"
-                      : "Tambah garis"
-                  }
+                  title="Tambah garis"
                 >
                   <svg
                     width="18"
@@ -1500,19 +1589,18 @@ export default function DatasetEditor() {
                     <path d="M4 17l6-8 4 4 6-7" />
                   </svg>
                 </button>
-                </>
               )}
 
               <div className="ed-toolbox-divider" />
 
               <button
-                className={`ed-toolbox-btn${fieldMode ? " ed-toolbox-btn-active" : ""}`}
+                className={`ed-toolbox-btn ed-toolbox-btn-label${fieldMode ? " ed-toolbox-btn-active" : ""}`}
                 onClick={() => setFieldMode((p) => !p)}
-                title="Mode Penandaan"
+                title="Mode Penandaan — simpan fitur baru sebagai survei lapangan (field), bukan data master"
               >
                 <svg
-                  width="18"
-                  height="18"
+                  width="16"
+                  height="16"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -1523,6 +1611,10 @@ export default function DatasetEditor() {
                   <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
                   <circle cx="12" cy="9" r="2.5" />
                 </svg>
+                <span className="ed-toolbox-btn-label-text">Penandaan</span>
+                <span className={`ed-toolbox-btn-state${fieldMode ? " ed-toolbox-btn-state-on" : ""}`}>
+                  {fieldMode ? "ON" : "OFF"}
+                </span>
               </button>
 
               {isSuperAdmin && (
