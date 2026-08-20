@@ -149,6 +149,74 @@ function sampleVertices(
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  Point layer stack (clusters + labels + points) shared by onLoad    */
+/*  and the cluster toggle so the source can be re-created cleanly.    */
+/* ------------------------------------------------------------------ */
+function addPointDraftLayers(map: maplibregl.Map, color: string) {
+  map.addLayer({
+    id: "draft-clusters",
+    type: "circle",
+    source: "draft",
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-radius": [
+        "step",
+        ["get", "point_count"],
+        14,
+        10, 20,
+        100, 30,
+        1000, 42,
+      ],
+      "circle-color": color,
+      "circle-opacity": 0.85,
+      "circle-stroke-color": "#0f172a",
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
+    id: "draft-cluster-labels",
+    type: "symbol",
+    source: "draft",
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": ["get", "point_count"],
+      "text-font": ["Open Sans Semibold"],
+      "text-size": 12,
+    },
+    paint: {
+      "text-color": "#ffffff",
+      "text-halo-color": "#0f172a",
+      "text-halo-width": 1.5,
+    },
+  });
+  map.addLayer({
+    id: "draft-points",
+    type: "circle",
+    source: "draft",
+    filter: ["!", ["has", "point_count"]],
+    paint: {
+      // Zoom curve: peak at mid zoom where points are placed, small at
+      // both far zoom (dense) and street level (keeps points unobtrusive).
+      "circle-radius": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        6, 4,
+        10, 5.5,
+        13, 6.5,
+        16, 5,
+        19, 3.5,
+        22, 3,
+      ],
+      "circle-color": color,
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#0f172a",
+      "circle-blur": 0.15,
+    },
+  });
+}
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -212,6 +280,10 @@ export default function DatasetEditor() {
     return localStorage.getItem(`autoflag_${datasetId}`) === "true";
   });
   const [initialLoading, setInitialLoading] = useState(true);
+  // Cluster mode OFF by default — users prefer seeing every point; the
+  // toolbox button lets super_admin/editor turn native clustering on.
+  const [clusterMode, setClusterMode] = useState(false);
+  const clusterModeRef = useRef(false);
 
   /* ---- derived ---- */
   const isPoint = meta?.geometryType === "Point";
@@ -550,6 +622,37 @@ export default function DatasetEditor() {
     });
   }, [datasetId]);
 
+  /** Re-create the "draft" source+layers with cluster on/off; ids stay the same so handlers keep working. */
+  const applyClusterMode = useCallback(
+    (next: boolean) => {
+      clusterModeRef.current = next;
+      setClusterMode(next);
+      const map = mapRef.current;
+      if (!map || !isPoint) return;
+      if (!map.getSource("draft")) return;
+      for (const lid of ["draft-clusters", "draft-cluster-labels", "draft-points"]) {
+        if (map.getLayer(lid)) map.removeLayer(lid);
+      }
+      map.removeSource("draft");
+      map.addSource("draft", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+        cluster: next,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      });
+      addPointDraftLayers(map, meta?.defaultColor ?? "#2563eb");
+      const fc = featuresRef.current;
+      if (fc) {
+        const src = map.getSource("draft");
+        if (src && "setData" in src) {
+          (src as maplibregl.GeoJSONSource).setData(fc);
+        }
+      }
+    },
+    [isPoint, meta]
+  );
+
   const closePopup = useCallback(() => {
     popupRef.current?.remove();
     popupRef.current = null;
@@ -597,64 +700,76 @@ export default function DatasetEditor() {
     const onLoad = () => {
       if (map.getSource("draft")) return;
 
+      // Reference layer: published ruas_jalan network shown under the draft
+      // data on the other datasets (sekolah/rambu/apj) to guide penitikan.
+      // Skipped on ruas_jalan itself — that editor intentionally shows
+      // drafts only, so grey published lines never get mixed into edits.
+      if (datasetId !== "ruas_jalan" && !map.getSource("roads-bg")) {
+        map.addSource("roads-bg", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "roads-bg-casing",
+          type: "line",
+          source: "roads-bg",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#0b1220",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 2,
+              10, 3,
+              14, 4.5,
+              18, 6,
+            ],
+            "line-opacity": 0.85,
+          },
+        });
+        map.addLayer({
+          id: "roads-bg-line",
+          type: "line",
+          source: "roads-bg",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#94a3b8",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 0.9,
+              10, 1.4,
+              14, 2.2,
+              18, 3.2,
+            ],
+            "line-opacity": 0.7,
+          },
+        });
+        void supabase
+          .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
+          .then(({ data }) => {
+            if (!data) return;
+            const src = map.getSource("roads-bg");
+            if (src && "setData" in src) {
+              (src as maplibregl.GeoJSONSource).setData(
+                data as FeatureCollection
+              );
+            }
+          });
+      }
+
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
-        cluster: isPoint,
+        cluster: isPoint && clusterModeRef.current,
         clusterMaxZoom: 14,
         clusterRadius: 50,
       });
 
       if (isPoint) {
-        map.addLayer({
-          id: "draft-clusters",
-          type: "circle",
-          source: "draft",
-          filter: ["has", "point_count"],
-          paint: {
-            "circle-radius": [
-              "step",
-              ["get", "point_count"],
-              14,
-              10, 20,
-              100, 30,
-              1000, 42,
-            ],
-            "circle-color": meta.defaultColor,
-            "circle-opacity": 0.85,
-            "circle-stroke-color": "#0f172a",
-            "circle-stroke-width": 2,
-          },
-        });
-        map.addLayer({
-          id: "draft-cluster-labels",
-          type: "symbol",
-          source: "draft",
-          filter: ["has", "point_count"],
-          layout: {
-            "text-field": ["get", "point_count"],
-            "text-font": ["Open Sans Semibold"],
-            "text-size": 12,
-          },
-          paint: {
-            "text-color": "#ffffff",
-            "text-halo-color": "#0f172a",
-            "text-halo-width": 1.5,
-          },
-        });
-        map.addLayer({
-          id: "draft-points",
-          type: "circle",
-          source: "draft",
-          filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-radius": 7,
-            "circle-color": meta.defaultColor,
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#0f172a",
-            "circle-blur": 0.15,
-          },
-        });
+        addPointDraftLayers(map, meta.defaultColor);
       } else {
         map.addLayer({
           id: "draft-lines",
@@ -885,6 +1000,11 @@ export default function DatasetEditor() {
   useEffect(() => {
     activeToolRef.current = activeTool;
   }, [activeTool]);
+
+  /* ---- keep clusterMode ref in sync for map handlers ---- */
+  useEffect(() => {
+    clusterModeRef.current = clusterMode;
+  }, [clusterMode]);
 
   /* ---- keep selectedFeature ref in sync for mount-time handlers ---- */
   useEffect(() => {
@@ -1509,6 +1629,31 @@ export default function DatasetEditor() {
                 </button>
               )}
 
+              {isPoint && (
+                <button
+                  className={`ed-toolbox-btn${clusterMode ? " ed-toolbox-btn-active" : ""}`}
+                  onClick={() => applyClusterMode(!clusterMode)}
+                  title={`Mode cluster: ${clusterMode ? "ON" : "OFF"} — ${clusterMode ? "titik digabung saat zoom out" : "semua titik tampil"}`}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="6" cy="6" r="2.5" />
+                    <circle cx="17" cy="7" r="2.5" />
+                    <circle cx="12" cy="15" r="2.5" />
+                    <circle cx="5" cy="18" r="2.5" />
+                    <path d="M8.4 7.6l6 6.2M14.8 9.1l-1.4 4M7.2 16.4l3.4-.9" />
+                  </svg>
+                </button>
+              )}
+
               {isSuperAdmin && (
                 <>
                 <button
@@ -1656,6 +1801,15 @@ export default function DatasetEditor() {
               )}
               <span className="ed-legend-label">Fitur (master)</span>
             </div>
+            {datasetId !== "ruas_jalan" && (
+              <div className="ed-legend-item">
+                <span
+                  className="ed-legend-swatch-line"
+                  style={{ backgroundColor: "#94a3b8" }}
+                />
+                <span className="ed-legend-label">Ruas jalan (referensi)</span>
+              </div>
+            )}
           </div>
 
           {/* ---- Empty state ---- */}
