@@ -837,7 +837,7 @@ export default function DatasetEditor() {
       td.start();
       tdRef.current = td;
       td.setMode(
-        canDraw
+        canDraw && activeToolRef.current === "draw"
           ? drawTargetRef.current === "point"
             ? "point"
             : "linestring"
