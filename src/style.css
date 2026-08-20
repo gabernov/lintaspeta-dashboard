@@ -1022,33 +1022,6 @@ body {
   background: rgba(245, 158, 11, 0.28);
 }
 
-/* Labeled toggle (Mode Penandaan) — wider than icon-only buttons so the
-   label + ON/OFF state are visible without hover. */
-.ed-toolbox-btn-label {
-  width: auto;
-  justify-content: flex-start;
-  gap: 6px;
-  padding: 0 8px;
-}
-.ed-toolbox-btn-label-text {
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ed-toolbox-btn-state {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.15);
-  color: var(--text-muted);
-}
-.ed-toolbox-btn-state-on {
-  background: rgba(245, 158, 11, 0.25);
-  color: #f59e0b;
-}
-
 /* Publish button accent */
 .ed-toolbox-btn-publish {
   color: #a855f7;

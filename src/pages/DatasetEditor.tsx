@@ -18,8 +18,6 @@ import type {
   MultiLineString,
 } from "geojson";
 
-const FIELD_COLOR = "#f59e0b";
-
 function basemapUrl(): string {
   const theme = document.documentElement.dataset.theme;
   const base = theme === "light" ? "light_all" : "dark_all";
@@ -164,7 +162,6 @@ export default function DatasetEditor() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hasFittedRef = useRef(false);
   const featuresRef = useRef<FeatureCollection | null>(null);
-  const publishedFCRef = useRef<FeatureCollection | null>(null);
   const activeToolRef = useRef<"select" | "pan" | "draw">("select");
   const dragRef = useRef<{
     featureId: string;
@@ -190,7 +187,6 @@ export default function DatasetEditor() {
     features: [],
   });
   const [editWindow, setEditWindow] = useState<EditWindow | null>(null);
-  const [fieldMode, setFieldMode] = useState(false);
   const [activeTool, setActiveTool] = useState<"select" | "pan" | "draw">(
     "select"
   );
@@ -222,8 +218,7 @@ export default function DatasetEditor() {
   const isSuperAdmin = role === "super_admin";
   const isEditor = role === "editor";
   const canDraw =
-    meta != null &&
-    (isSuperAdmin || (isEditor && (editWindow?.open || fieldMode)));
+    meta != null && (isSuperAdmin || (isEditor && editWindow?.open));
 
   /* ---- callbacks ---- */
   const showToast = useCallback((msg: string, ok: boolean) => {
@@ -257,56 +252,48 @@ export default function DatasetEditor() {
     else map.dragPan.disable();
   }, []);
 
-  const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
-    const map = mapRef.current;
-    if (!map) return;
-    const src = map.getSource("draft");
-    if (src && "setData" in src) {
-      (src as maplibregl.GeoJSONSource).setData(fc);
-    }
-    if (!hasFittedRef.current) {
-      const bbox = computeBBox(fc);
-      if (bbox) {
-        map.fitBounds(bbox, { padding: 60, maxZoom: 14 });
-      } else {
-        map.fitBounds(
-          [
-            [105.5, -8],
-            [109.5, -5.5],
-          ],
-          { padding: 60 }
-        );
+  const applyFeaturesToSource = useCallback(
+    (fc: FeatureCollection) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const src = map.getSource("draft");
+      if (src && "setData" in src) {
+        (src as maplibregl.GeoJSONSource).setData(fc);
       }
-      hasFittedRef.current = true;
-    }
-  }, []);
-
-  const applyPublishedFilter = useCallback(() => {
-    const map = mapRef.current;
-    const published = publishedFCRef.current;
-    const draft = featuresRef.current;
-    if (!map || !published || !draft) return;
-    const src = map.getSource("roads-bg");
-    if (!src || !("setData" in src)) return;
-    // Hide the grey published version of any line that has a pending draft
-    // edit — otherwise the old and new geometries render side by side ("2 lines").
-    const edited = new Set<string>();
-    for (const f of draft.features) {
-      const p = f.properties as Record<string, unknown> | null;
-      if (p && p._status === "pending" && typeof p._source_id === "string") {
-        edited.add(p._source_id);
+      if (!hasFittedRef.current) {
+        const saved = datasetId
+          ? sessionStorage.getItem(`ed_viewport_${datasetId}`)
+          : null;
+        if (saved) {
+          try {
+            const { lng, lat, zoom } = JSON.parse(saved) as {
+              lng: number;
+              lat: number;
+              zoom: number;
+            };
+            map.jumpTo({ center: [lng, lat], zoom });
+          } catch {
+            /* fall through to fitBounds */
+          }
+        } else {
+          const bbox = computeBBox(fc);
+          if (bbox) {
+            map.fitBounds(bbox, { padding: 60, maxZoom: 14 });
+          } else {
+            map.fitBounds(
+              [
+                [105.5, -8],
+                [109.5, -5.5],
+              ],
+              { padding: 60 }
+            );
+          }
+        }
+        hasFittedRef.current = true;
       }
-    }
-    if (edited.size === 0) return;
-    const filtered: FeatureCollection = {
-      type: "FeatureCollection",
-      features: published.features.filter((f) => {
-        const sid = (f.properties as Record<string, unknown> | null)?._source_id;
-        return typeof sid !== "string" || !edited.has(sid);
-      }),
-    };
-    (src as maplibregl.GeoJSONSource).setData(filtered);
-  }, []);
+    },
+    [datasetId]
+  );
 
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
@@ -327,8 +314,7 @@ export default function DatasetEditor() {
     if (mapRef.current?.getSource("draft")) {
       applyFeaturesToSource(fc);
     }
-    applyPublishedFilter();
-  }, [datasetId, applyFeaturesToSource, applyPublishedFilter]);
+  }, [datasetId, applyFeaturesToSource]);
 
   const refreshEditWindow = useCallback(async () => {
     if (!datasetId) return;
@@ -428,7 +414,7 @@ export default function DatasetEditor() {
         p_geometry: geometry,
         p_properties: values,
         p_region: String(regionVal),
-        p_source_type: fieldMode ? "field" : "master",
+        p_source_type: "master",
       });
 
       setSaving(false);
@@ -454,7 +440,6 @@ export default function DatasetEditor() {
       formMode,
       selectedFeature,
       region,
-      fieldMode,
       showToast,
       refreshFeatures,
     ]
@@ -529,6 +514,12 @@ export default function DatasetEditor() {
       }
       showToast("Posisi diperbarui", true);
       void refreshFeatures();
+      // User feedback (poin 4): open the data panel after a geometry edit.
+      const updated = { ...full, geometry } as Feature;
+      setSelectedFeature(updated);
+      selectedFeatureRef.current = updated;
+      setFormMode("update");
+      setFormOpen(true);
     },
     [meta, datasetId, fetchFeatureDetail, region, showToast, refreshFeatures]
   );
@@ -606,63 +597,6 @@ export default function DatasetEditor() {
     const onLoad = () => {
       if (map.getSource("draft")) return;
 
-      if (!map.getSource("roads-bg")) {
-        map.addSource("roads-bg", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-        map.addLayer({
-          id: "roads-bg-casing",
-          type: "line",
-          source: "roads-bg",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#0b1220",
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              6, 2,
-              10, 3,
-              14, 4.5,
-              18, 6,
-            ],
-            "line-opacity": 0.85,
-          },
-        });
-        map.addLayer({
-          id: "roads-bg-line",
-          type: "line",
-          source: "roads-bg",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#94a3b8",
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              6, 0.9,
-              10, 1.4,
-              14, 2.2,
-              18, 3.2,
-            ],
-            "line-opacity": 0.7,
-          },
-        });
-        void supabase
-          .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
-          .then(({ data }) => {
-            if (!data) return;
-            publishedFCRef.current = data as FeatureCollection;
-            const src = map.getSource("roads-bg");
-            if (src && "setData" in src) {
-              (src as maplibregl.GeoJSONSource).setData(
-                data as FeatureCollection
-              );
-            }
-          });
-      }
-
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -714,30 +648,10 @@ export default function DatasetEditor() {
           source: "draft",
           filter: ["!", ["has", "point_count"]],
           paint: {
-            "circle-radius": [
-              "case",
-              ["==", ["get", "_source_type"], "field"],
-              10,
-              7,
-            ],
-            "circle-color": [
-              "case",
-              ["==", ["get", "_source_type"], "field"],
-              FIELD_COLOR,
-              meta.defaultColor,
-            ],
-            "circle-stroke-width": [
-              "case",
-              ["==", ["get", "_source_type"], "field"],
-              3,
-              2,
-            ],
-            "circle-stroke-color": [
-              "case",
-              ["==", ["get", "_source_type"], "field"],
-              "#92400e",
-              "#0f172a",
-            ],
+            "circle-radius": 7,
+            "circle-color": meta.defaultColor,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#0f172a",
             "circle-blur": 0.15,
           },
         });
@@ -751,12 +665,7 @@ export default function DatasetEditor() {
             "line-join": "round",
           },
           paint: {
-            "line-color": [
-              "case",
-              ["==", ["get", "_source_type"], "field"],
-              FIELD_COLOR,
-              meta.defaultColor,
-            ],
+            "line-color": meta.defaultColor,
             "line-width": 3,
           },
         });
@@ -891,6 +800,15 @@ export default function DatasetEditor() {
       const t = setTimeout(onLoad, 8000);
       map.once("remove", () => clearTimeout(t));
     }
+
+    map.on("moveend", () => {
+      if (!datasetId) return;
+      const c = map.getCenter();
+      sessionStorage.setItem(
+        `ed_viewport_${datasetId}`,
+        JSON.stringify({ lng: c.lng, lat: c.lat, zoom: map.getZoom() })
+      );
+    });
 
     function initTerraDraw() {
       if (tdRef.current) {
@@ -1591,32 +1509,6 @@ export default function DatasetEditor() {
                 </button>
               )}
 
-              <div className="ed-toolbox-divider" />
-
-              <button
-                className={`ed-toolbox-btn ed-toolbox-btn-label${fieldMode ? " ed-toolbox-btn-active" : ""}`}
-                onClick={() => setFieldMode((p) => !p)}
-                title="Mode Penandaan — simpan fitur baru sebagai survei lapangan (field), bukan data master"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7z" />
-                  <circle cx="12" cy="9" r="2.5" />
-                </svg>
-                <span className="ed-toolbox-btn-label-text">Penandaan</span>
-                <span className={`ed-toolbox-btn-state${fieldMode ? " ed-toolbox-btn-state-on" : ""}`}>
-                  {fieldMode ? "ON" : "OFF"}
-                </span>
-              </button>
-
               {isSuperAdmin && (
                 <>
                 <button
@@ -1764,20 +1656,6 @@ export default function DatasetEditor() {
               )}
               <span className="ed-legend-label">Fitur (master)</span>
             </div>
-            <div className="ed-legend-item">
-              {isPoint ? (
-                <span
-                  className="ed-legend-swatch ed-legend-swatch-field"
-                  style={{ backgroundColor: FIELD_COLOR }}
-                />
-              ) : (
-                <span
-                  className="ed-legend-swatch-line"
-                  style={{ backgroundColor: FIELD_COLOR }}
-                />
-              )}
-              <span className="ed-legend-label">Penandaan lapangan</span>
-            </div>
           </div>
 
           {/* ---- Empty state ---- */}
@@ -1823,9 +1701,7 @@ export default function DatasetEditor() {
             meta={meta}
             feature={formMode === "update" ? selectedFeature : null}
             mode={formMode}
-            canEdit={
-              isSuperAdmin || (isEditor && (editWindow?.open || fieldMode))
-            }
+            canEdit={isSuperAdmin || (isEditor && (editWindow?.open ?? false))}
             canDelete={isSuperAdmin || isEditor}
             onSave={handleSave}
             onDelete={handleDelete}
