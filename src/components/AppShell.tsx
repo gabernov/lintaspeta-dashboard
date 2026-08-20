@@ -57,9 +57,8 @@ export default function AppShell() {
         <aside className="sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22">
-                <path d="M12 2 4 6v12l8 4 8-4V6l-8-4z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
               </svg>
             </div>
             <div className="sidebar-brand-text">

@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { Fragment, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { TerraDraw, TerraDrawPointMode, TerraDrawLineStringMode } from "terra-draw";
@@ -1509,6 +1509,285 @@ export default function DatasetEditor() {
   }, [activeTool]);
 
   /* ================================================================ */
+  /*  TOOLBOX — Excalidraw-style: grouped tools with keyboard 1-9     */
+  /* ================================================================ */
+  type ToolboxBtn = {
+    key: string;
+    group: "action" | "mode" | "zoom";
+    show: boolean | undefined;
+    title: string;
+    active: boolean;
+    disabled?: boolean;
+    className?: string;
+    icon: ReactNode;
+    onClick: () => void;
+  };
+
+  const toolboxBtns: ToolboxBtn[] = [
+    {
+      key: "select",
+      group: "action",
+      show: true,
+      active: activeTool === "select",
+      title: "Pilih (cursor) — klik fitur untuk edit/hapus, seret untuk pindah",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
+          <path d="M11.07 11.07l4.24 4.24" />
+        </svg>
+      ),
+      onClick: () => setActiveTool("select"),
+    },
+    {
+      key: "pan",
+      group: "action",
+      show: true,
+      active: activeTool === "pan",
+      title: "Geser peta (tangan) — seret untuk memindahkan peta",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 11V6a2 2 0 0 0-4 0v5" />
+          <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+          <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+          <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+        </svg>
+      ),
+      onClick: () => setActiveTool("pan"),
+    },
+    {
+      key: "draw",
+      group: "action",
+      show: canDraw,
+      active: activeTool === "draw",
+      title: isPoint ? "Tambah titik" : "Tambah garis",
+      icon: isPoint ? (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      ) : (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 17l6-8 4 4 6-7" />
+        </svg>
+      ),
+      onClick: () => handleStartDraw(isPoint ? "point" : "line"),
+    },
+    {
+      key: "cluster",
+      group: "mode",
+      show: isPoint,
+      active: clusterMode,
+      title: `Mode cluster: ${clusterMode ? "ON" : "OFF"} — ${clusterMode ? "titik digabung saat zoom out" : "semua titik tampil"}`,
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="6" cy="6" r="2.5" />
+          <circle cx="17" cy="7" r="2.5" />
+          <circle cx="12" cy="15" r="2.5" />
+          <circle cx="5" cy="18" r="2.5" />
+          <path d="M8.4 7.6l6 6.2M14.8 9.1l-1.4 4M7.2 16.4l3.4-.9" />
+        </svg>
+      ),
+      onClick: () => applyClusterMode(!clusterMode),
+    },
+    {
+      key: "autopublish",
+      group: "mode",
+      show: isSuperAdmin,
+      active: autoSchedule,
+      title: `Auto publish 2 hari: ${autoSchedule ? "ON" : "OFF"}`,
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      ),
+      onClick: toggleAutoSchedule,
+    },
+    {
+      key: "publish",
+      group: "mode",
+      show: isSuperAdmin,
+      active: false,
+      disabled: publishBusy,
+      className: "ed-toolbox-btn-publish",
+      title: "Publish ke Peta Publik",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+          <polyline points="16 6 12 2 8 6" />
+          <line x1="12" y1="2" x2="12" y2="15" />
+        </svg>
+      ),
+      onClick: handlePublish,
+    },
+    {
+      key: "zoomin",
+      group: "zoom",
+      show: true,
+      active: false,
+      title: "Perbesar",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      ),
+      onClick: () => {
+        const m = mapRef.current;
+        if (m) m.easeTo({ zoom: m.getZoom() + 1, duration: 200 });
+      },
+    },
+    {
+      key: "zoomout",
+      group: "zoom",
+      show: true,
+      active: false,
+      title: "Perkecil",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        >
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      ),
+      onClick: () => {
+        const m = mapRef.current;
+        if (m) m.easeTo({ zoom: m.getZoom() - 1, duration: 200 });
+      },
+    },
+    {
+      key: "reset",
+      group: "zoom",
+      show: true,
+      active: false,
+      title: "Reset ke Jawa Barat",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+        </svg>
+      ),
+      onClick: () => {
+        const m = mapRef.current;
+        if (m) m.easeTo({ center: [107.6, -6.9], zoom: 9, duration: 400 });
+      },
+    },
+  ];
+
+  const visibleToolboxBtns = toolboxBtns.filter((b) => b.show);
+  const visibleToolboxBtnsRef = useRef(visibleToolboxBtns);
+  useEffect(() => {
+    visibleToolboxBtnsRef.current = visibleToolboxBtns;
+  });
+
+  /** Keyboard 1-9 activates the Nth visible toolbox tool (Excalidraw-style). */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!/^[1-9]$/.test(e.key)) return;
+      const btn = visibleToolboxBtnsRef.current[Number(e.key) - 1];
+      if (btn && !btn.disabled) btn.onClick();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* ================================================================ */
   /*  RENDER                                                          */
   /* ================================================================ */
   if (!meta) {
@@ -1542,211 +1821,25 @@ export default function DatasetEditor() {
           </div>
         </div>
 
-          {/* ---- Floating Toolbox ---- */}
+          {/* ---- Floating Toolbox (Excalidraw-style) ---- */}
           {(isSuperAdmin || isEditor) && (
             <div className="ed-toolbox">
-              <button
-                className={`ed-toolbox-btn${activeTool === "select" ? " ed-toolbox-btn-active" : ""}`}
-                onClick={() => setActiveTool("select")}
-                title="Pilih (cursor) — klik fitur untuk edit/hapus, seret untuk pindah"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
-                  <path d="M11.07 11.07l4.24 4.24" />
-                </svg>
-              </button>
-
-              <button
-                className={`ed-toolbox-btn${activeTool === "pan" ? " ed-toolbox-btn-active" : ""}`}
-                onClick={() => setActiveTool("pan")}
-                title="Geser peta (tangan) — seret untuk memindahkan peta"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M18 11V6a2 2 0 0 0-4 0v5" />
-                  <path d="M14 10V4a2 2 0 0 0-4 0v6" />
-                  <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
-                  <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
-                </svg>
-              </button>
-
-              {canDraw && isPoint && (
-                <button
-                  className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "point" ? " ed-toolbox-btn-active" : ""}`}
-                  onClick={() => handleStartDraw("point")}
-                  title="Tambah titik"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+              {visibleToolboxBtns.map((btn, i) => (
+                <Fragment key={btn.key}>
+                  {i > 0 && visibleToolboxBtns[i - 1].group !== btn.group && (
+                    <div className="ed-toolbox-divider" />
+                  )}
+                  <button
+                    className={`ed-toolbox-btn${btn.active ? " ed-toolbox-btn-active" : ""}${btn.className ? ` ${btn.className}` : ""}`}
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
+                    title={`${i + 1}. ${btn.title}`}
                   >
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
-              )}
-              {canDraw && !isPoint && (
-                <button
-                  className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "line" ? " ed-toolbox-btn-active" : ""}`}
-                  onClick={() => handleStartDraw("line")}
-                  title="Tambah garis"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 17l6-8 4 4 6-7" />
-                  </svg>
-                </button>
-              )}
-
-              {isPoint && (
-                <button
-                  className={`ed-toolbox-btn${clusterMode ? " ed-toolbox-btn-active" : ""}`}
-                  onClick={() => applyClusterMode(!clusterMode)}
-                  title={`Mode cluster: ${clusterMode ? "ON" : "OFF"} — ${clusterMode ? "titik digabung saat zoom out" : "semua titik tampil"}`}
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="6" cy="6" r="2.5" />
-                    <circle cx="17" cy="7" r="2.5" />
-                    <circle cx="12" cy="15" r="2.5" />
-                    <circle cx="5" cy="18" r="2.5" />
-                    <path d="M8.4 7.6l6 6.2M14.8 9.1l-1.4 4M7.2 16.4l3.4-.9" />
-                  </svg>
-                </button>
-              )}
-
-              {isSuperAdmin && (
-                <>
-                <button
-                  className="ed-toolbox-btn"
-                  onClick={toggleAutoSchedule}
-                  title={`Auto publish 2 hari: ${autoSchedule ? "ON" : "OFF"}`}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
-                </button>
-                <button
-                  className="ed-toolbox-btn ed-toolbox-btn-publish"
-                  onClick={handlePublish}
-                  disabled={publishBusy}
-                  title="Publish ke Peta Publik"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                    <polyline points="16 6 12 2 8 6" />
-                    <line x1="12" y1="2" x2="12" y2="15" />
-                  </svg>
-                </button>
-                </>
-              )}
-
-              <div className="ed-toolbox-divider" />
-
-              <button
-                className="ed-toolbox-btn"
-                onClick={() => {
-                  const m = mapRef.current;
-                  if (m) m.easeTo({ zoom: m.getZoom() + 1, duration: 200 });
-                }}
-                title="Perbesar"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-
-              <button
-                className="ed-toolbox-btn"
-                onClick={() => {
-                  const m = mapRef.current;
-                  if (m) m.easeTo({ zoom: m.getZoom() - 1, duration: 200 });
-                }}
-                title="Perkecil"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                >
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-              <button
-                className="ed-toolbox-btn"
-                onClick={() => {
-                  const m = mapRef.current;
-                  if (m) m.easeTo({ center: [107.6, -6.9], zoom: 9, duration: 400 });
-                }}
-                title="Reset ke Jawa Barat"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-                </svg>
-              </button>
+                    <span className="ed-toolbox-key">{i + 1}</span>
+                    {btn.icon}
+                  </button>
+                </Fragment>
+              ))}
             </div>
           )}
 
