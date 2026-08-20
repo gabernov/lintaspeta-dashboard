@@ -1038,6 +1038,61 @@ body {
   background: rgba(148, 163, 184, 0.12);
 }
 
+/* Marquee selection rectangle (select tool drag) */
+.ed-marquee {
+  position: absolute;
+  z-index: 5;
+  border: 1.5px dashed rgba(245, 158, 11, 0.9);
+  background: rgba(245, 158, 11, 0.12);
+  pointer-events: none;
+}
+
+/* Bulk selection bar (top-center floating) */
+.ed-selection-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 13px;
+}
+.ed-selection-count {
+  font-weight: 600;
+}
+.ed-selection-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ed-selection-btn:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+.ed-selection-btn-del {
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+.ed-selection-btn-del:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+.ed-selection-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---- Legend (bottom-left, above scale) ---- */
 .ed-legend {
   position: absolute;

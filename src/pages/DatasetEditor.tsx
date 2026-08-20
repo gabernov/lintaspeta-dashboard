@@ -15,6 +15,7 @@ import type {
   Geometry,
   Point,
   LineString,
+  MultiLineString,
 } from "geojson";
 
 const FIELD_COLOR = "#f59e0b";
@@ -113,6 +114,24 @@ function translateGeometry(geom: Geometry, dLng: number, dLat: number): Geometry
   }
 }
 
+type LineGeom = LineString | MultiLineString;
+
+function isLineGeom(g: Geometry | null | undefined): g is LineGeom {
+  return !!g && (g.type === "LineString" || g.type === "MultiLineString");
+}
+
+function lineCoords(g: LineGeom): [number, number][] {
+  const raw = g.type === "LineString" ? g.coordinates : g.coordinates[0];
+  return (raw as [number, number][]).map((c) => [c[0], c[1]] as [number, number]);
+}
+
+function rebuildLineGeom(g: LineGeom, coords: [number, number][]): LineGeom {
+  if (g.type === "LineString") {
+    return { type: "LineString", coordinates: coords };
+  }
+  return { type: "MultiLineString", coordinates: [coords] };
+}
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -132,6 +151,17 @@ export default function DatasetEditor() {
     startLngLat: { lng: number; lat: number };
     origGeom: Geometry;
   } | null>(null);
+  const drawTargetRef = useRef<"point" | "line">(
+    meta?.geometryType === "Point" ? "point" : "line"
+  );
+  const vertexDragRef = useRef<{
+    featureId: string;
+    origGeom: LineGeom;
+    coords: [number, number][];
+    index: number;
+    startLngLat: { lng: number; lat: number };
+  } | null>(null);
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   /* ---- state ---- */
   const [features, setFeatures] = useState<FeatureCollection>({
@@ -143,6 +173,16 @@ export default function DatasetEditor() {
   const [activeTool, setActiveTool] = useState<"select" | "pan" | "draw">(
     "select"
   );
+  const [drawTarget, setDrawTarget] = useState<"point" | "line">(
+    meta?.geometryType === "Point" ? "point" : "line"
+  );
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [marquee, setMarquee] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "update">("create");
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
@@ -171,13 +211,22 @@ export default function DatasetEditor() {
   }, []);
 
   /** Shared draw-start handler used by both toolbar and floating toolbox. */
-  const handleStartDraw = useCallback(() => {
+  const handleStartDraw = useCallback((target: "point" | "line") => {
+    drawTargetRef.current = target;
+    setDrawTarget(target);
     if (tdRef.current) {
       tdRef.current.clear();
-      tdRef.current.setMode(isPoint ? "point" : "linestring");
+      tdRef.current.setMode(target === "point" ? "point" : "linestring");
     }
     setActiveTool("draw");
-  }, [isPoint]);
+  }, []);
+
+  const applyDragPan = useCallback((tool: "select" | "pan" | "draw") => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (tool === "pan") map.dragPan.enable();
+    else map.dragPan.disable();
+  }, []);
 
   const applyFeaturesToSource = useCallback((fc: FeatureCollection) => {
     const map = mapRef.current;
@@ -360,6 +409,28 @@ export default function DatasetEditor() {
     void refreshFeatures();
   }, [datasetId, selectedFeature, showToast, refreshFeatures]);
 
+  const handleBulkDelete = useCallback(async () => {
+    if (!datasetId || selectedIds.length === 0) return;
+    setSaving(true);
+    const results = await Promise.all(
+      selectedIds.map((id) =>
+        supabase.rpc("delete_draft_feature", {
+          p_dataset: datasetId,
+          p_id: id,
+        })
+      )
+    );
+    setSaving(false);
+    const failed = results.find((r) => r.error);
+    if (failed) {
+      showToast("Gagal menghapus: " + failed.error?.message, false);
+      return;
+    }
+    showToast(`${selectedIds.length} fitur dihapus`, true);
+    setSelectedIds([]);
+    void refreshFeatures();
+  }, [datasetId, selectedIds, showToast, refreshFeatures]);
+
   const persistMovedFeature = useCallback(
     async (draftId: string, geometry: Geometry) => {
       if (!meta || !datasetId) return;
@@ -523,7 +594,7 @@ export default function DatasetEditor() {
       map.addSource("draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
-        cluster: true,
+        cluster: isPoint,
         clusterMaxZoom: 14,
         clusterRadius: 50,
       });
@@ -619,6 +690,51 @@ export default function DatasetEditor() {
         });
       }
 
+      map.addSource("draft-selected", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      if (isPoint) {
+        map.addLayer({
+          id: "draft-selected-points",
+          type: "circle",
+          source: "draft-selected",
+          paint: {
+            "circle-radius": 14,
+            "circle-color": "rgba(245, 158, 11, 0.35)",
+            "circle-stroke-color": "#f59e0b",
+            "circle-stroke-width": 3,
+          },
+        });
+      } else {
+        map.addLayer({
+          id: "draft-selected-lines",
+          type: "line",
+          source: "draft-selected",
+          paint: {
+            "line-color": "#f59e0b",
+            "line-width": 8,
+            "line-opacity": 0.85,
+          },
+        });
+      }
+
+      map.addSource("line-edit-vertices", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "line-edit-vertices",
+        type: "circle",
+        source: "line-edit-vertices",
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#ffffff",
+          "circle-stroke-color": "#f59e0b",
+          "circle-stroke-width": 3,
+        },
+      });
+
       const layerIds = isPoint ? ["draft-points"] : ["draft-lines"];
 
       if (isPoint) {
@@ -674,6 +790,7 @@ export default function DatasetEditor() {
         });
         if (clickedOnFeature.length > 0) return;
 
+        setSelectedIds([]);
         closePopup();
 
         if (formMode === "update" && selectedFeature) {
@@ -714,21 +831,26 @@ export default function DatasetEditor() {
       }
       const adapter = new TerraDrawMapLibreGLAdapter({ map });
 
-      const modes = isPoint
-        ? [new TerraDrawPointMode()]
-        : [new TerraDrawLineStringMode()];
+      const modes = [new TerraDrawPointMode(), new TerraDrawLineStringMode()];
 
       const td = new TerraDraw({ adapter, modes });
       td.start();
       tdRef.current = td;
-      td.setMode(canDraw ? (isPoint ? "point" : "linestring") : "static");
+      td.setMode(
+        canDraw
+          ? drawTargetRef.current === "point"
+            ? "point"
+            : "linestring"
+          : "static"
+      );
 
       td.on("finish", (_id, context) => {
         if (context.action === "draw") {
           const snap = td.getSnapshot();
           const drawn = snap.find(
             (f) =>
-              f.properties?.mode === (isPoint ? "point" : "linestring") &&
+              f.properties?.mode ===
+                (drawTargetRef.current === "point" ? "point" : "linestring") &&
               !f.properties?.currentlyDrawing
           );
           if (drawn) {
@@ -773,6 +895,16 @@ export default function DatasetEditor() {
     activeToolRef.current = activeTool;
   }, [activeTool]);
 
+  /* ---- keep drawTarget ref in sync ---- */
+  useEffect(() => {
+    drawTargetRef.current = drawTarget;
+  }, [drawTarget]);
+
+  /* ---- disable map drag-pan unless pan tool is active ---- */
+  useEffect(() => {
+    applyDragPan(activeTool);
+  }, [activeTool, applyDragPan]);
+
   /* ---- system cursor per tool (Excalidraw-style) ---- */
   useEffect(() => {
     const map = mapRef.current;
@@ -805,12 +937,14 @@ export default function DatasetEditor() {
   useEffect(() => {
     if (tdRef.current && meta) {
       if (activeTool === "draw" && canDraw) {
-        tdRef.current.setMode(isPoint ? "point" : "linestring");
+        tdRef.current.setMode(
+          drawTarget === "point" ? "point" : "linestring"
+        );
       } else {
         tdRef.current.setMode("static");
       }
     }
-  }, [activeTool, canDraw, meta, isPoint]);
+  }, [activeTool, canDraw, meta, drawTarget]);
 
   /* ---- initial data fetch ---- */
   useEffect(() => {
@@ -882,6 +1016,7 @@ export default function DatasetEditor() {
   const handleFeatureClick = useCallback(
     (feat: Feature) => {
       closePopup();
+      setSelectedIds([]);
       void fetchFeatureDetail(resolveDraftId(feat)).then((full) => {
         setSelectedFeature(full ?? feat);
         setFormMode("update");
@@ -897,8 +1032,28 @@ export default function DatasetEditor() {
     if (!map || !meta || activeTool !== "select") return;
 
     const layerId = isPoint ? "draft-points" : "draft-lines";
+    const vertexLayerId = "line-edit-vertices";
     const previewPointLayer = "drag-preview-point";
     const previewLineLayer = "drag-preview-line";
+
+    const setDraftData = (fc: FeatureCollection) => {
+      const src = map.getSource("draft") as maplibregl.GeoJSONSource;
+      if (src) src.setData(fc);
+    };
+
+    const setVertices = (coords: [number, number][]) => {
+      const vsrc = map.getSource("line-edit-vertices") as maplibregl.GeoJSONSource;
+      if (vsrc) {
+        vsrc.setData({
+          type: "FeatureCollection",
+          features: coords.map((c, i) => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: c },
+            properties: { vi: i },
+          })),
+        });
+      }
+    };
 
     const ensurePreviewLayer = () => {
       if (!map.getSource("drag-preview")) {
@@ -948,42 +1103,185 @@ export default function DatasetEditor() {
 
     const onMouseDown = (e: maplibregl.MapMouseEvent) => {
       if (activeToolRef.current !== "select") return;
+
+      const isLineEdit =
+        formMode === "update" && isLineGeom(selectedFeature?.geometry);
+
+      if (isLineEdit) {
+        const vhits = map.queryRenderedFeatures(e.point, {
+          layers: [vertexLayerId],
+        });
+        if (vhits.length) {
+          const vi = Number(vhits[0].properties?.vi ?? 0);
+          const origGeom = selectedFeature!.geometry as LineGeom;
+          vertexDragRef.current = {
+            featureId: resolveDraftId(selectedFeature!),
+            origGeom,
+            coords: lineCoords(origGeom),
+            index: vi,
+            startLngLat: { lng: e.lngLat.lng, lat: e.lngLat.lat },
+          };
+          map.getCanvas().style.cursor = "grabbing";
+          return;
+        }
+      }
+
       const feats = map.queryRenderedFeatures(e.point, { layers: [layerId] });
-      if (!feats.length) return;
-      const feat = feats[0] as unknown as Feature;
-      const g = feat.geometry;
-      if (!g || !g.type || !("coordinates" in g)) return;
-      dragRef.current = {
-        featureId: resolveDraftId(feat),
-        startLngLat: { lng: e.lngLat.lng, lat: e.lngLat.lat },
-        origGeom: g as Geometry,
-      };
-      ensurePreviewLayer();
-      setPreview(g as Geometry);
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
+      if (feats.length) {
+        const feat = feats[0] as unknown as Feature;
+        const g = feat.geometry;
+        if (!g || !g.type || !("coordinates" in g)) return;
+        const featureId = resolveDraftId(feat);
+        dragRef.current = {
+          featureId,
+          startLngLat: { lng: e.lngLat.lng, lat: e.lngLat.lat },
+          origGeom: g as Geometry,
+        };
+        const fc = featuresRef.current;
+        if (fc) {
+          setDraftData({
+            ...fc,
+            features: fc.features.filter((f) => String(f.id) !== featureId),
+          });
+        }
+        ensurePreviewLayer();
+        setPreview(g as Geometry);
+        map.getCanvas().style.cursor = "grabbing";
+        return;
+      }
+
+      marqueeStartRef.current = { x: e.point.x, y: e.point.y };
+      setMarquee({ x1: e.point.x, y1: e.point.y, x2: e.point.x, y2: e.point.y });
+      map.getCanvas().style.cursor = "crosshair";
     };
 
     const onMouseMove = (e: maplibregl.MapMouseEvent) => {
+      const v = vertexDragRef.current;
+      if (v) {
+        const dLng = e.lngLat.lng - v.startLngLat.lng;
+        const dLat = e.lngLat.lat - v.startLngLat.lat;
+        const newCoords = v.coords.map((c, i) =>
+          i === v.index
+            ? ([c[0] + dLng, c[1] + dLat] as [number, number])
+            : c
+        );
+        const fc = featuresRef.current;
+        if (fc) {
+          setDraftData({
+            ...fc,
+            features: fc.features.map((f) =>
+              String(f.id) === v.featureId
+                ? {
+                    ...f,
+                    geometry: rebuildLineGeom(v.origGeom, newCoords),
+                  }
+                : f
+            ),
+          });
+        }
+        setVertices(newCoords);
+        return;
+      }
+
       const d = dragRef.current;
-      if (!d) return;
-      const dLng = e.lngLat.lng - d.startLngLat.lng;
-      const dLat = e.lngLat.lat - d.startLngLat.lat;
-      setPreview(translateGeometry(d.origGeom, dLng, dLat));
+      if (d) {
+        const dLng = e.lngLat.lng - d.startLngLat.lng;
+        const dLat = e.lngLat.lat - d.startLngLat.lat;
+        setPreview(translateGeometry(d.origGeom, dLng, dLat));
+        return;
+      }
+
+      const ms = marqueeStartRef.current;
+      if (ms) {
+        setMarquee({
+          x1: Math.min(ms.x, e.point.x),
+          y1: Math.min(ms.y, e.point.y),
+          x2: Math.max(ms.x, e.point.x),
+          y2: Math.max(ms.y, e.point.y),
+        });
+      }
     };
 
     const onMouseUp = (e: maplibregl.MapMouseEvent) => {
+      const v = vertexDragRef.current;
+      if (v) {
+        vertexDragRef.current = null;
+        const dLng = e.lngLat.lng - v.startLngLat.lng;
+        const dLat = e.lngLat.lat - v.startLngLat.lat;
+        applyDragPan(activeToolRef.current);
+        map.getCanvas().style.cursor = "";
+        if (dLng === 0 && dLat === 0) return;
+        const newGeom = rebuildLineGeom(
+          v.origGeom,
+          v.coords.map((c, i) =>
+            i === v.index
+              ? ([c[0] + dLng, c[1] + dLat] as [number, number])
+              : c
+          )
+        );
+        const fc = featuresRef.current;
+        if (fc) {
+          setDraftData({
+            ...fc,
+            features: fc.features.map((f) =>
+              String(f.id) === v.featureId ? { ...f, geometry: newGeom } : f
+            ),
+          });
+        }
+        void persistMovedFeature(v.featureId, newGeom);
+        return;
+      }
+
       const d = dragRef.current;
-      if (!d) return;
-      dragRef.current = null;
-      const dLng = e.lngLat.lng - d.startLngLat.lng;
-      const dLat = e.lngLat.lat - d.startLngLat.lat;
-      removePreviewLayer();
-      map.dragPan.enable();
-      map.getCanvas().style.cursor = "";
-      if (dLng === 0 && dLat === 0) return;
-      const newGeom = translateGeometry(d.origGeom, dLng, dLat);
-      void persistMovedFeature(d.featureId, newGeom);
+      if (d) {
+        dragRef.current = null;
+        const dLng = e.lngLat.lng - d.startLngLat.lng;
+        const dLat = e.lngLat.lat - d.startLngLat.lat;
+        removePreviewLayer();
+        applyDragPan(activeToolRef.current);
+        map.getCanvas().style.cursor = "";
+        if (dLng === 0 && dLat === 0) {
+          const fc = featuresRef.current;
+          if (fc) setDraftData(fc);
+          return;
+        }
+        const newGeom = translateGeometry(d.origGeom, dLng, dLat);
+        const fc = featuresRef.current;
+        if (fc) {
+          setDraftData({
+            ...fc,
+            features: fc.features.map((f) =>
+              String(f.id) === d.featureId ? { ...f, geometry: newGeom } : f
+            ),
+          });
+        }
+        void persistMovedFeature(d.featureId, newGeom);
+        return;
+      }
+
+      const ms = marqueeStartRef.current;
+      if (ms) {
+        marqueeStartRef.current = null;
+        const x1 = Math.min(ms.x, e.point.x);
+        const y1 = Math.min(ms.y, e.point.y);
+        const x2 = Math.max(ms.x, e.point.x);
+        const y2 = Math.max(ms.y, e.point.y);
+        setMarquee(null);
+        applyDragPan(activeToolRef.current);
+        map.getCanvas().style.cursor = "";
+        if (x2 - x1 < 5 && y2 - y1 < 5) return;
+        const hits = map.queryRenderedFeatures(
+          [
+            [x1, y1],
+            [x2, y2],
+          ] as [[number, number], [number, number]],
+          { layers: [layerId] }
+        );
+        const ids = Array.from(
+          new Set(hits.map((f) => resolveDraftId(f as unknown as Feature)))
+        );
+        setSelectedIds(ids);
+      }
     };
 
     map.on("mousedown", onMouseDown);
@@ -994,11 +1292,25 @@ export default function DatasetEditor() {
       map.off("mousemove", onMouseMove);
       map.off("mouseup", onMouseUp);
       dragRef.current = null;
+      vertexDragRef.current = null;
+      marqueeStartRef.current = null;
       removePreviewLayer();
-      map.dragPan.enable();
+      setMarquee(null);
+      const fc = featuresRef.current;
+      if (fc) setDraftData(fc);
+      applyDragPan(activeToolRef.current);
       map.getCanvas().style.cursor = "";
     };
-  }, [meta, isPoint, activeTool, persistMovedFeature, resolveDraftId]);
+  }, [
+    meta,
+    isPoint,
+    activeTool,
+    formMode,
+    selectedFeature,
+    persistMovedFeature,
+    resolveDraftId,
+    applyDragPan,
+  ]);
 
   useEffect(() => {
     if (!mapRef.current || !meta) return;
@@ -1016,6 +1328,49 @@ export default function DatasetEditor() {
       map.off("click", layerId, handler);
     };
   }, [meta, isPoint, handleFeatureClick]);
+
+  /* ---- populate vertex handles for the line being edited ---- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("line-edit-vertices") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!src) return;
+    const isLineEdit =
+      formMode === "update" && isLineGeom(selectedFeature?.geometry);
+    if (!isLineEdit) {
+      src.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    const coords = lineCoords(selectedFeature!.geometry as LineGeom);
+    src.setData({
+      type: "FeatureCollection",
+      features: coords.map((c, i) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: c },
+        properties: { vi: i },
+      })),
+    });
+  }, [selectedFeature, formMode]);
+
+  /* ---- render marquee-selected features highlight ---- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("draft-selected") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!src) return;
+    const ids = new Set(selectedIds);
+    const feats = features.features.filter((f) => ids.has(String(f.id)));
+    src.setData({ type: "FeatureCollection", features: feats });
+  }, [selectedIds, features]);
+
+  /* ---- clear selection when leaving the select tool ---- */
+  useEffect(() => {
+    if (activeTool !== "select") setSelectedIds([]);
+  }, [activeTool]);
 
   /* ================================================================ */
   /*  RENDER                                                          */
@@ -1097,10 +1452,16 @@ export default function DatasetEditor() {
               </button>
 
               {canDraw && (
+                <>
                 <button
-                  className={`ed-toolbox-btn${activeTool === "draw" ? " ed-toolbox-btn-active" : ""}`}
-                  onClick={handleStartDraw}
-                  title={isPoint ? "Tambah titik" : "Tambah garis"}
+                  className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "point" ? " ed-toolbox-btn-active" : ""}`}
+                  onClick={() => handleStartDraw("point")}
+                  disabled={!isPoint}
+                  title={
+                    isPoint
+                      ? "Tambah titik"
+                      : "Tambah titik — nonaktif untuk peta ruas jalan"
+                  }
                 >
                   <svg
                     width="18"
@@ -1116,6 +1477,30 @@ export default function DatasetEditor() {
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 </button>
+                <button
+                  className={`ed-toolbox-btn${activeTool === "draw" && drawTarget === "line" ? " ed-toolbox-btn-active" : ""}`}
+                  onClick={() => handleStartDraw("line")}
+                  disabled={isPoint}
+                  title={
+                    isPoint
+                      ? "Tambah garis — nonaktif untuk peta titik"
+                      : "Tambah garis"
+                  }
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 17l6-8 4 4 6-7" />
+                  </svg>
+                </button>
+                </>
               )}
 
               <div className="ed-toolbox-divider" />
@@ -1232,6 +1617,41 @@ export default function DatasetEditor() {
                   <circle cx="12" cy="12" r="3" />
                   <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                 </svg>
+              </button>
+            </div>
+          )}
+
+          {/* ---- Marquee overlay (select tool) ---- */}
+          {activeTool === "select" && marquee && (
+            <div
+              className="ed-marquee"
+              style={{
+                left: Math.min(marquee.x1, marquee.x2),
+                top: Math.min(marquee.y1, marquee.y2),
+                width: Math.abs(marquee.x2 - marquee.x1),
+                height: Math.abs(marquee.y2 - marquee.y1),
+              }}
+            />
+          )}
+
+          {/* ---- Selection bar (bulk actions) ---- */}
+          {selectedIds.length > 0 && (
+            <div className="ed-selection-bar">
+              <span className="ed-selection-count">
+                {selectedIds.length} fitur terpilih
+              </span>
+              <button
+                className="ed-selection-btn ed-selection-btn-del"
+                onClick={handleBulkDelete}
+                disabled={saving}
+              >
+                Hapus
+              </button>
+              <button
+                className="ed-selection-btn"
+                onClick={() => setSelectedIds([])}
+              >
+                Batal
               </button>
             </div>
           )}
