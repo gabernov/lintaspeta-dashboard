@@ -285,6 +285,18 @@ export default function DatasetEditor() {
   const [clusterMode, setClusterMode] = useState(false);
   const clusterModeRef = useRef(false);
 
+  /* ---- undo / redo ---- */
+  type UndoOp =
+    | { type: "create"; geometry: Geometry; properties: Record<string, unknown>; region: string; sourceId: string }
+    | { type: "update"; id: string; oldGeometry: Geometry; oldProperties: Record<string, unknown>; newGeometry: Geometry; newProperties: Record<string, unknown>; region: string }
+    | { type: "delete"; feature: Feature }
+    | { type: "bulk-delete"; features: Feature[] }
+    | { type: "move"; id: string; oldGeometry: Geometry; newGeometry: Geometry; properties: Record<string, unknown>; region: string; sourceId: string; sourceType: string };
+  const undoStackRef = useRef<UndoOp[]>([]);
+  const redoStackRef = useRef<UndoOp[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
   /* ---- derived ---- */
   const isPoint = meta?.geometryType === "Point";
   const isSuperAdmin = role === "super_admin";
@@ -296,6 +308,13 @@ export default function DatasetEditor() {
   const showToast = useCallback((msg: string, ok: boolean) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const pushUndo = useCallback((op: UndoOp) => {
+    undoStackRef.current = [...undoStackRef.current.slice(-49), op];
+    redoStackRef.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
   }, []);
 
   /** Shared draw-start handler used by both toolbar and floating toolbox. */
@@ -479,6 +498,16 @@ export default function DatasetEditor() {
           ? String(selectedFeature.id)
           : null;
 
+      if (formMode === "create") {
+        pushUndo({ type: "create", geometry, properties: values, region: String(regionVal), sourceId });
+      } else if (formMode === "update" && selectedFeature) {
+        pushUndo({
+          type: "update", id: String(selectedFeature.id),
+          oldGeometry: selectedFeature.geometry, oldProperties: (selectedFeature.properties ?? {}) as Record<string, unknown>,
+          newGeometry: geometry, newProperties: values, region: String(regionVal),
+        });
+      }
+
       const { error } = await supabase.rpc("save_draft_feature", {
         p_dataset: datasetId,
         p_id: pId,
@@ -519,6 +548,7 @@ export default function DatasetEditor() {
 
   const handleDelete = useCallback(async () => {
     if (!datasetId || !selectedFeature?.id) return;
+    pushUndo({ type: "delete", feature: selectedFeature });
     setSaving(true);
     const { error } = await supabase.rpc("delete_draft_feature", {
       p_dataset: datasetId,
@@ -538,6 +568,10 @@ export default function DatasetEditor() {
 
   const handleBulkDelete = useCallback(async () => {
     if (!datasetId || selectedIds.length === 0) return;
+    const featsToDelete = selectedIds
+      .map((id) => featuresRef.current?.features.find((f) => String(f.id) === id))
+      .filter(Boolean) as Feature[];
+    pushUndo({ type: "bulk-delete", features: featsToDelete });
     setSaving(true);
     const results = await Promise.all(
       selectedIds.map((id) =>
@@ -571,6 +605,10 @@ export default function DatasetEditor() {
       for (const [k, v] of Object.entries(fullProps)) {
         if (!k.startsWith("_")) props[k] = v;
       }
+      pushUndo({
+        type: "move", id: draftId, oldGeometry: full.geometry, newGeometry: geometry,
+        properties: fullProps, region: regionVal, sourceId, sourceType,
+      });
       const { error } = await supabase.rpc("save_draft_feature", {
         p_dataset: datasetId,
         p_id: draftId,
@@ -595,6 +633,137 @@ export default function DatasetEditor() {
     },
     [meta, datasetId, fetchFeatureDetail, region, showToast, refreshFeatures]
   );
+
+  const handleUndo = useCallback(async () => {
+    if (undoStackRef.current.length === 0 || !datasetId) return;
+    const op = undoStackRef.current.pop()!;
+    redoStackRef.current = [...redoStackRef.current, op];
+    setCanRedo(true);
+    setCanUndo(undoStackRef.current.length > 0);
+
+    switch (op.type) {
+      case "create": {
+        const fc = featuresRef.current;
+        const feat = fc?.features.find((f) => f.properties?._source_id === op.sourceId);
+        if (feat) {
+          await supabase.rpc("delete_draft_feature", { p_dataset: datasetId, p_id: String(feat.id) });
+        }
+        break;
+      }
+      case "update": {
+        const oldProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(op.oldProperties)) {
+          if (!k.startsWith("_")) oldProps[k] = v;
+        }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: op.id,
+          p_source_id: op.oldProperties._source_id as string ?? op.id,
+          p_geometry: op.oldGeometry, p_properties: oldProps,
+          p_region: op.oldProperties._region as string ?? "", p_source_type: op.oldProperties._source_type as string ?? "master",
+        });
+        break;
+      }
+      case "delete": {
+        const f = op.feature;
+        const fp = (f.properties ?? {}) as Record<string, unknown>;
+        const cleanProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(fp)) { if (!k.startsWith("_")) cleanProps[k] = v; }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: null,
+          p_source_id: (fp._source_id as string) ?? `undo-${Date.now()}`,
+          p_geometry: f.geometry, p_properties: cleanProps,
+          p_region: (fp._region as string) ?? "", p_source_type: (fp._source_type as string) ?? "master",
+        });
+        break;
+      }
+      case "bulk-delete": {
+        for (const f of op.features) {
+          const fp = (f.properties ?? {}) as Record<string, unknown>;
+          const cleanProps: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(fp)) { if (!k.startsWith("_")) cleanProps[k] = v; }
+          await supabase.rpc("save_draft_feature", {
+            p_dataset: datasetId, p_id: null,
+            p_source_id: (fp._source_id as string) ?? `undo-${Date.now()}`,
+            p_geometry: f.geometry, p_properties: cleanProps,
+            p_region: (fp._region as string) ?? "", p_source_type: (fp._source_type as string) ?? "master",
+          });
+        }
+        break;
+      }
+      case "move": {
+        const moveProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(op.properties)) { if (!k.startsWith("_")) moveProps[k] = v; }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: op.id, p_source_id: op.sourceId,
+          p_geometry: op.oldGeometry, p_properties: moveProps,
+          p_region: op.region, p_source_type: op.sourceType,
+        });
+        break;
+      }
+    }
+    setFormOpen(false);
+    setSelectedFeature(null);
+    tdRef.current?.clear();
+    await refreshFeatures();
+  }, [datasetId, refreshFeatures]);
+
+  const handleRedo = useCallback(async () => {
+    if (redoStackRef.current.length === 0 || !datasetId) return;
+    const op = redoStackRef.current.pop()!;
+    undoStackRef.current = [...undoStackRef.current, op];
+    setCanUndo(true);
+    setCanRedo(redoStackRef.current.length > 0);
+
+    switch (op.type) {
+      case "create": {
+        const fp = op.properties as Record<string, unknown>;
+        const cleanProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(fp)) { if (!k.startsWith("_")) cleanProps[k] = v; }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: null, p_source_id: op.sourceId,
+          p_geometry: op.geometry, p_properties: cleanProps,
+          p_region: op.region, p_source_type: "master",
+        });
+        break;
+      }
+      case "update": {
+        const newProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(op.newProperties)) { if (!k.startsWith("_")) newProps[k] = v; }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: op.id,
+          p_source_id: op.oldProperties._source_id as string ?? op.id,
+          p_geometry: op.newGeometry, p_properties: newProps,
+          p_region: op.region, p_source_type: op.oldProperties._source_type as string ?? "master",
+        });
+        break;
+      }
+      case "delete": {
+        const f = op.feature;
+        await supabase.rpc("delete_draft_feature", { p_dataset: datasetId, p_id: String(f.id) });
+        break;
+      }
+      case "bulk-delete": {
+        for (const f of op.features) {
+          await supabase.rpc("delete_draft_feature", { p_dataset: datasetId, p_id: String(f.id) });
+        }
+        break;
+      }
+      case "move": {
+        const moveProps: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(op.properties)) { if (!k.startsWith("_")) moveProps[k] = v; }
+        await supabase.rpc("save_draft_feature", {
+          p_dataset: datasetId, p_id: op.id, p_source_id: op.sourceId,
+          p_geometry: op.newGeometry, p_properties: moveProps,
+          p_region: op.region, p_source_type: op.sourceType,
+        });
+        break;
+      }
+    }
+    setFormOpen(false);
+    setSelectedFeature(null);
+    tdRef.current?.clear();
+    await refreshFeatures();
+  }, [datasetId, refreshFeatures]);
 
   const handlePublish = useCallback(async () => {
     if (!datasetId || !isSuperAdmin) return;
@@ -1015,6 +1184,11 @@ export default function DatasetEditor() {
   useEffect(() => {
     drawTargetRef.current = drawTarget;
   }, [drawTarget]);
+
+  const handleUndoRef = useRef(handleUndo);
+  const handleRedoRef = useRef(handleRedo);
+  useEffect(() => { handleUndoRef.current = handleUndo; }, [handleUndo]);
+  useEffect(() => { handleRedoRef.current = handleRedo; }, [handleRedo]);
 
   /* ---- disable map drag-pan unless pan tool is active ---- */
   useEffect(() => {
@@ -1609,6 +1783,34 @@ export default function DatasetEditor() {
       onClick: () => handleStartDraw(isPoint ? "point" : "line"),
     },
     {
+      key: "undo",
+      group: "action",
+      show: true,
+      active: false,
+      disabled: !canUndo,
+      title: "Urungkan (Ctrl+Z)",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+        </svg>
+      ),
+      onClick: handleUndo,
+    },
+    {
+      key: "redo",
+      group: "action",
+      show: true,
+      active: false,
+      disabled: !canRedo,
+      title: "Ulangi (Ctrl+Y)",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
+        </svg>
+      ),
+      onClick: handleRedo,
+    },
+    {
       key: "cluster",
       group: "mode",
       show: isPoint,
@@ -1778,6 +1980,16 @@ export default function DatasetEditor() {
           t.isContentEditable)
       )
         return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        handleUndoRef.current();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        handleRedoRef.current();
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (!/^[1-9]$/.test(e.key)) return;
       const btn = visibleToolboxBtnsRef.current[Number(e.key) - 1];
