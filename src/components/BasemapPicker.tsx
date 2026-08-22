@@ -44,15 +44,16 @@ export default function BasemapPicker() {
         type="button"
         className="topbar-btn bm-btn"
         onClick={() => setOpen((v) => !v)}
-        title={`Basemap: ${current.label}`}
+        title={`Ganti peta dasar — ${current.label}`}
+        aria-label={`Peta dasar: ${current.label}`}
         aria-haspopup="true"
         aria-expanded={open}
       >
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 0 1 0 18M12 3a15.3 15.3 0 0 0 0 18" />
+          <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" />
+          <path d="M9 4v14" />
+          <path d="M15 6v14" />
         </svg>
-        <span className="bm-current">{current.label}</span>
       </button>
       {open && (
         <div className="bm-menu" role="menu">

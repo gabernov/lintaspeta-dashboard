@@ -668,6 +668,17 @@ body {
 .ed-map-wrap .maplibregl-map {
   height: 100%;
 }
+.ed-map-wrap .maplibregl-ctrl-scale {
+  background: var(--glass-legend);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-soft-4);
+  border-top: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px 2px;
+}
 
 /* Side Panel — floating card over the map, left of the top-right toolbox */
 .ed-panel {
@@ -1224,39 +1235,35 @@ body {
   position: relative;
 }
 .bm-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  place-items: center;
+  width: 34px;
   height: 34px;
-  padding: 0 10px;
-  border-radius: 9px;
-  border: 1px solid var(--border-soft-4);
-  background: var(--glass-legend);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--glass);
+  color: var(--text-muted);
   cursor: pointer;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition:
     background 150ms ease,
-    border-color 150ms ease;
+    border-color 150ms ease,
+    color 150ms ease;
 }
 .bm-btn:hover {
-  border-color: #2563eb;
-}
-.bm-current {
-  max-width: 72px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-strong);
+  color: var(--accent-soft);
 }
 .bm-menu {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
-  z-index: 70;
+  left: 0;
+  z-index: 90;
   min-width: 168px;
+  max-width: calc(100vw - 24px);
   background: var(--glass-legend);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -2280,7 +2287,7 @@ body {
     font-size: 13px;
   }
   .ed-legend {
-    bottom: 8px;
+    bottom: 44px;
     left: 8px;
     font-size: 10.5px;
     gap: 4px;

@@ -995,6 +995,11 @@ export default function DatasetEditor() {
       maxWidth: "320px",
     });
 
+    map.addControl(
+      new maplibregl.ScaleControl({ maxWidth: 130, unit: "metric" }),
+      "bottom-left"
+    );
+
     const onLoad = () => {
       if (map.getSource("draft")) return;
 
@@ -1158,7 +1163,7 @@ export default function DatasetEditor() {
           map.on("mouseleave", lid, () => {
             if (activeToolRef.current === "pan") map.getCanvas().style.cursor = "grab";
             else if (activeToolRef.current === "draw") map.getCanvas().style.cursor = "crosshair";
-            else map.getCanvas().style.cursor = "";
+            else map.getCanvas().style.cursor = "default";
           });
         }
       }
@@ -1171,7 +1176,7 @@ export default function DatasetEditor() {
         map.on("mouseleave", lid, () => {
           if (activeToolRef.current === "pan") map.getCanvas().style.cursor = "grab";
           else if (activeToolRef.current === "draw") map.getCanvas().style.cursor = "crosshair";
-          else map.getCanvas().style.cursor = "";
+          else map.getCanvas().style.cursor = "default";
         });
       }
 
@@ -1359,7 +1364,7 @@ export default function DatasetEditor() {
     const applyCursor = () => {
       if (activeTool === "pan") canvas.style.cursor = "grab";
       else if (activeTool === "draw") canvas.style.cursor = "crosshair";
-      else canvas.style.cursor = "";
+      else canvas.style.cursor = "default";
     };
     applyCursor();
     if (activeTool !== "pan") return;
@@ -1656,7 +1661,7 @@ export default function DatasetEditor() {
         const dLng = e.lngLat.lng - v.startLngLat.lng;
         const dLat = e.lngLat.lat - v.startLngLat.lat;
         applyDragPan(activeToolRef.current);
-        map.getCanvas().style.cursor = "";
+        map.getCanvas().style.cursor = "default";
         if (dLng === 0 && dLat === 0) return;
         const newGeom = rebuildLineGeom(
           v.origGeom,
@@ -1695,7 +1700,7 @@ export default function DatasetEditor() {
         const dLat = e.lngLat.lat - d.startLngLat.lat;
         removePreviewLayer();
         applyDragPan(activeToolRef.current);
-        map.getCanvas().style.cursor = "";
+        map.getCanvas().style.cursor = "default";
         if (dLng === 0 && dLat === 0) {
           const fc = featuresRef.current;
           if (fc) setDraftData(fc);
@@ -1733,7 +1738,7 @@ export default function DatasetEditor() {
         const y2 = Math.max(ms.y, e.point.y);
         setMarquee(null);
         applyDragPan(activeToolRef.current);
-        map.getCanvas().style.cursor = "";
+        map.getCanvas().style.cursor = "default";
         if (x2 - x1 < 5 && y2 - y1 < 5) return;
         const hits = map.queryRenderedFeatures(
           [
@@ -1764,7 +1769,7 @@ export default function DatasetEditor() {
       const fc = featuresRef.current;
       if (fc) setDraftData(fc);
       applyDragPan(activeToolRef.current);
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = "default";
     };
   }, [
     meta,
