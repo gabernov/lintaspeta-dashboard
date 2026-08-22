@@ -992,10 +992,7 @@ body {
   z-index: 5;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: calc(100dvh - 200px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  gap: 3px;
   background: var(--glass-soft);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -2240,18 +2237,20 @@ body {
     padding-inline: 10px;
   }
 
-  /* Editor page */
+  /* Editor page — compact left stack: tool pill on top, info panel
+     tucked just below with breathing room, toolbox clear of both. */
   .ed-panel-tl {
-    top: 56px;
+    top: 62px;
     left: 8px;
     right: auto;
-    max-width: calc(100vw - 76px);
+    max-width: calc(100vw - 68px);
     font-size: 12px;
-    gap: 4px;
+    gap: 5px;
+    padding: 8px 10px;
   }
   .ed-panel-tl-sub {
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 5px;
     font-size: 11px;
   }
   .ed-panel-tl-title {
@@ -2260,7 +2259,14 @@ body {
   .ed-toolbox {
     top: 8px;
     right: 8px;
-    max-height: 58vh;
+  }
+  .ed-toolbox {
+    max-height: 52vh;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .ed-toolbox::-webkit-scrollbar {
+    display: none;
   }
   .ed-panel {
     right: 8px;
