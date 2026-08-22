@@ -2234,64 +2234,98 @@ body {
     padding-inline: 10px;
   }
 
-  /* Editor page — mobile: keep the top-left for tiny icon buttons only
-     (drawer/basemap/theme); info panel drops to bottom-left as a
-     compact chip above the legend so it never covers the map corner. */
+  /* Editor page — small screens: dock controls to a bottom band so the
+     map stays clear. Info chip bottom-left, toolbox bottom-right. */
+  .ed-toolbox {
+    top: auto;
+    bottom: 8px;
+    right: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    max-width: 50vw;
+  }
+  .ed-toolbox-divider {
+    display: none;
+  }
+  .ed-toolbox-btn {
+    width: 40px;
+    height: 40px;
+  }
   .ed-panel-tl {
     top: auto;
-    bottom: 56px;
+    bottom: 8px;
     left: 8px;
     right: auto;
-    max-width: calc(100vw - 90px);
-    font-size: 12px;
-    gap: 5px;
-    padding: 7px 10px;
+    max-width: 46vw;
+    font-size: 11px;
+    gap: 4px;
+    padding: 6px 8px;
   }
   .ed-panel-tl-sub {
     flex-wrap: wrap;
-    gap: 5px;
-    font-size: 11px;
+    gap: 4px;
+    font-size: 10px;
   }
   .ed-panel-tl-title {
-    font-size: 14px;
+    font-size: 13px;
   }
-  .ed-toolbox {
-    top: 8px;
+  .ed-legend {
+    left: calc(46vw + 12px);
+    right: auto;
+    bottom: 8px;
+    max-width: 40vw;
+    font-size: 10.5px;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+  .ed-legend-toggle {
+    font-size: 9px;
+  }
+  .ed-panel {
     right: 8px;
-    max-height: 52vh;
+    left: 8px;
+    width: auto;
+    max-height: 58vh;
+    overflow-y: auto;
+  }
+  .ed-selection-bar {
+    top: auto;
+    bottom: 60px;
+    max-width: calc(100% - 16px);
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+  }
+}
+
+/* Short-height (e.g. phone landscape): the map is very short, so cap
+   the docked controls to fit the viewport instead of overflowing. */
+@media (max-width: 820px), (max-height: 560px) {
+  .ed-toolbox {
+    max-width: 54vw;
+    max-height: 24vh;
     overflow-y: auto;
     scrollbar-width: none;
   }
   .ed-toolbox::-webkit-scrollbar {
     display: none;
   }
-  .ed-panel {
-    right: 8px;
-    left: 8px;
-    width: auto;
-    max-height: 72vh;
+  .ed-panel-tl {
+    max-height: 24vh;
     overflow-y: auto;
-  }
-  .ed-selection-bar {
-    top: auto;
-    bottom: 76px;
-    max-width: calc(100% - 24px);
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 6px;
-  }
-  .ed-legend {
-    bottom: 10px;
-    left: 8px;
-    gap: 4px;
-    padding: 6px 9px;
-    font-size: 11px;
-    max-width: 52vw;
   }
 }
 
 @media (max-width: 480px) {
   .ed-legend {
     display: none;
+  }
+  .ed-toolbox {
+    max-width: 54vw;
+  }
+  .ed-panel-tl {
+    max-width: 42vw;
   }
 }
