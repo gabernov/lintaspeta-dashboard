@@ -1215,44 +1215,85 @@ body {
   line-height: 1.4;
 }
 
-/* ---- Basemap picker (bottom-right) ---- */
-.ed-basemap {
-  position: absolute;
-  right: 12px;
-  bottom: 40px;
-  z-index: 5;
+/* ---- Topbar basemap dropdown ---- */
+.bm-wrap {
+  position: relative;
+}
+.bm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft-4);
   background: var(--glass-legend);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+.bm-btn:hover {
+  border-color: #2563eb;
+}
+.bm-current {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bm-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 70;
+  min-width: 168px;
+  background: var(--glass-legend);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-soft-4);
-  border-radius: 10px;
-  padding: 6px;
+  border-radius: 12px;
+  padding: 5px;
+  box-shadow: 0 14px 40px rgba(2, 8, 23, 0.35);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
-.ed-basemap-opt {
+.bm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 500;
   text-align: left;
-  padding: 5px 10px;
-  border-radius: 7px;
+  padding: 7px 9px;
+  border-radius: 8px;
   cursor: pointer;
-  white-space: nowrap;
   transition:
-    background 150ms ease,
-    color 150ms ease;
+    background 130ms ease,
+    color 130ms ease;
 }
-.ed-basemap-opt:hover {
+.bm-item:hover {
   background: rgba(37, 99, 235, 0.14);
   color: var(--text);
 }
-.ed-basemap-opt.on {
-  background: #2563eb;
-  color: #ffffff;
+.bm-item.on {
+  color: var(--text);
+  font-weight: 700;
+}
+.bm-check {
+  width: 14px;
+  flex-shrink: 0;
+  color: #2563eb;
+  font-weight: 800;
 }
 
 /* ---- Empty state (centered overlay) ---- */
@@ -2162,10 +2203,8 @@ body {
    reflow to full-width with thumb-reachable controls.
    ----------------------------------------------------------- */
 @media (max-width: 820px) {
-  /* Shell: sidebar ? overlay drawer */
-  .shell {
-    display: block;
-  }
+  /* Shell stays flex - only the sidebar leaves the flow (fixed drawer),
+     so .content keeps its viewport-height constraint. */
   .sidebar {
     position: fixed;
     top: 0;
@@ -2224,28 +2263,10 @@ body {
     font-size: 11px;
     max-width: 52vw;
   }
-  .ed-basemap {
-    right: 8px;
-    bottom: 10px;
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    max-width: 44vw;
-  }
-  .ed-basemap-opt {
-    padding: 5px 8px;
-    font-size: 10.5px;
-  }
 }
 
 @media (max-width: 480px) {
   .ed-legend {
     display: none;
-  }
-  .ed-basemap {
-    left: 8px;
-    right: 8px;
-    max-width: none;
-    justify-content: space-between;
   }
 }

@@ -6,6 +6,7 @@ import { TerraDraw, TerraDrawPointMode, TerraDrawLineStringMode } from "terra-dr
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
+import { ED_BASEMAP_EVENT, getBasemap } from "../lib/basemaps";
 import { useAuth } from "../auth/AuthContext";
 import AttributeForm from "../components/editor/AttributeForm";
 import type { EditWindow } from "../lib/types";
@@ -18,34 +19,8 @@ import type {
   MultiLineString,
 } from "geojson";
 
-/* Raster basemap catalog — "bright" (CartoDB Voyager) is the default
-   across every dataset editor, per product request. */
-const BASEMAPS = [
-  {
-    id: "bright",
-    label: "Bright",
-    url: "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-  },
-  {
-    id: "positron",
-    label: "Putih",
-    url: "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-  },
-  {
-    id: "dark",
-    label: "Gelap",
-    url: "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
-  },
-] as const;
-
-type BasemapId = (typeof BASEMAPS)[number]["id"];
-
-function getBasemap(id: string | null | undefined) {
-  return BASEMAPS.find((b) => b.id === id) ?? BASEMAPS[0];
-}
+/* Basemap catalog lives in lib/basemaps.ts — picked from the topbar
+   dropdown and applied here via the ed-basemap window event. */
 
 /* Deterministic per-ruas color: golden-angle hue walk keeps adjacent
    ruas visually distinct even with many features on screen. */
@@ -386,11 +361,8 @@ export default function DatasetEditor() {
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
 
-  /* ---- basemap switcher (default bright for every dataset) ---- */
-  const [basemapId, setBasemapId] = useState<BasemapId>(() => {
-    return getBasemap(localStorage.getItem("ed_basemap")).id;
-  });
-  const basemapIdRef = useRef(basemapId);
+  /* ---- basemap: default bright, switched from the topbar dropdown ---- */
+  const basemapIdRef = useRef(getBasemap(localStorage.getItem("ed_basemap")).id);
 
   /* ---- undo / redo ---- */
   type UndoOp =
@@ -584,13 +556,17 @@ export default function DatasetEditor() {
     const fc = roadsBgRef.current;
     if (!map || !map.getLayer("roads-bg-line")) return;
     if (distinctRuasRef.current && fc) {
-      for (const f of fc.features) {
+      fc.features.forEach((f, idx) => {
         const p = (f.properties ?? {}) as Record<string, unknown>;
+        // Index in the seed guarantees distinct hues even when the
+        // published payload carries no kode/nama properties.
         f.properties = {
           ...p,
-          _ruas_color: ruasColor(String(p.kode_number ?? p.nama ?? f.id ?? "")),
+          _ruas_color: ruasColor(
+            `${String(p.kode_number ?? "")}|${String(p.nama ?? "")}|${idx}`
+          ),
         };
-      }
+      });
       const src = map.getSource("roads-bg");
       if (src && "setData" in src) {
         (src as maplibregl.GeoJSONSource).setData(fc);
@@ -1330,17 +1306,20 @@ export default function DatasetEditor() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- swap basemap tiles when the user picks another one ---- */
+  /* ---- apply topbar basemap picks to the map tiles ---- */
   useEffect(() => {
-    basemapIdRef.current = basemapId;
-    localStorage.setItem("ed_basemap", basemapId);
-    const src = mapRef.current?.getSource("basemap");
-    if (src && "setTiles" in src) {
-      (src as maplibregl.RasterTileSource).setTiles([
-        getBasemap(basemapId).url,
-      ]);
-    }
-  }, [basemapId]);
+    const onPick = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      const bm = getBasemap(id);
+      basemapIdRef.current = bm.id;
+      const src = mapRef.current?.getSource("basemap");
+      if (src && "setTiles" in src) {
+        (src as maplibregl.RasterTileSource).setTiles([bm.url]);
+      }
+    };
+    window.addEventListener(ED_BASEMAP_EVENT, onPick);
+    return () => window.removeEventListener(ED_BASEMAP_EVENT, onPick);
+  }, []);
 
   /* ---- keep activeTool ref in sync for event handlers ---- */
   useEffect(() => {
@@ -2304,21 +2283,6 @@ export default function DatasetEditor() {
                 </button>
               </div>
             )}
-          </div>
-
-          {/* ---- Basemap picker ---- */}
-          <div className="ed-basemap" role="group" aria-label="Pilih basemap">
-            {BASEMAPS.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                className={`ed-basemap-opt${basemapId === b.id ? " on" : ""}`}
-                onClick={() => setBasemapId(b.id)}
-                title={`Basemap ${b.label}`}
-              >
-                {b.label}
-              </button>
-            ))}
           </div>
 
           {/* ---- Empty state ---- */}
