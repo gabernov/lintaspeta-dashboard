@@ -2252,7 +2252,12 @@ body {
 
 /* Editor tool sheet — narrow screens AND short landscape (e.g.
    iPhone 12 Pro at 844x390, whose WIDTH escapes the 820px query).
-   Toolbox + legend collapse behind a FAB; map stays clear. */
+   Toolbox + legend collapse behind a FAB; map stays clear.
+   Desktop: FAB hidden, dock wrapper inert (children keep their own
+   absolute positions). */
+.ed-dock-fab {
+  display: none;
+}
 @media (max-width: 820px), (max-height: 560px) {
   .ed-dock {
     display: none;
