@@ -260,13 +260,10 @@ body {
   z-index: 40;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
-  border-radius: 12px;
-  background: var(--glass-legend);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--border-soft-4);
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 .sidebar-toggle {
   width: 34px;
@@ -2237,16 +2234,18 @@ body {
     padding-inline: 10px;
   }
 
-  /* Editor page — compact left stack: tool pill on top, info panel
-     tucked just below with breathing room, toolbox clear of both. */
+  /* Editor page — mobile: keep the top-left for tiny icon buttons only
+     (drawer/basemap/theme); info panel drops to bottom-left as a
+     compact chip above the legend so it never covers the map corner. */
   .ed-panel-tl {
-    top: 62px;
+    top: auto;
+    bottom: 56px;
     left: 8px;
     right: auto;
-    max-width: calc(100vw - 68px);
+    max-width: calc(100vw - 90px);
     font-size: 12px;
     gap: 5px;
-    padding: 8px 10px;
+    padding: 7px 10px;
   }
   .ed-panel-tl-sub {
     flex-wrap: wrap;
@@ -2259,8 +2258,6 @@ body {
   .ed-toolbox {
     top: 8px;
     right: 8px;
-  }
-  .ed-toolbox {
     max-height: 52vh;
     overflow-y: auto;
     scrollbar-width: none;

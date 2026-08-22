@@ -12,8 +12,6 @@ export default function BasemapPicker() {
   const [current, setCurrent] = useState(() => getBasemap(localStorage.getItem("ed_basemap")));
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  if (!isMapRoute) return null;
-
   useEffect(() => {
     if (!open) return;
     const onDocClick = (e: MouseEvent) => {
@@ -37,6 +35,8 @@ export default function BasemapPicker() {
     setOpen(false);
     window.dispatchEvent(new CustomEvent(ED_BASEMAP_EVENT, { detail: bm.id }));
   };
+
+  if (!isMapRoute) return null;
 
   return (
     <div className="bm-wrap" ref={wrapRef}>
