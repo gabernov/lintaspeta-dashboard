@@ -18,10 +18,101 @@ import type {
   MultiLineString,
 } from "geojson";
 
-function basemapUrl(): string {
-  const theme = document.documentElement.dataset.theme;
-  const base = theme === "light" ? "light_all" : "dark_all";
-  return `https://basemaps.cartocdn.com/${base}/{z}/{x}/{y}@2x.png`;
+/* Raster basemap catalog — "bright" (CartoDB Voyager) is the default
+   across every dataset editor, per product request. */
+const BASEMAPS = [
+  {
+    id: "bright",
+    label: "Bright",
+    url: "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+    attribution: "© OpenStreetMap contributors © CARTO",
+  },
+  {
+    id: "positron",
+    label: "Putih",
+    url: "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
+    attribution: "© OpenStreetMap contributors © CARTO",
+  },
+  {
+    id: "dark",
+    label: "Gelap",
+    url: "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
+    attribution: "© OpenStreetMap contributors © CARTO",
+  },
+] as const;
+
+type BasemapId = (typeof BASEMAPS)[number]["id"];
+
+function getBasemap(id: string | null | undefined) {
+  return BASEMAPS.find((b) => b.id === id) ?? BASEMAPS[0];
+}
+
+/* Deterministic per-ruas color: golden-angle hue walk keeps adjacent
+   ruas visually distinct even with many features on screen. */
+function ruasColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0;
+  }
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue} 72% 46%)`;
+}
+
+/* Squared distance from point to a lng/lat vertex array — good enough
+   for nearest-ruas ranking at province scale. */
+function distSqToCoords(
+  p: [number, number],
+  coords: [number, number][]
+): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < coords.length; i++) {
+    const [ax, ay] = coords[i];
+    const [bx, by] = coords[i + 1];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : ((p[0] - ax) * dx + (p[1] - ay) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const cx = ax + t * dx;
+    const cy = ay + t * dy;
+    const ddx = p[0] - cx;
+    const ddy = p[1] - cy;
+    // Scale lng by cos(lat) so horizontal distances compare fairly.
+    const mx = ddx * Math.cos((p[1] * Math.PI) / 180);
+    const d2 = mx * mx + ddy * ddy;
+    if (d2 < best) best = d2;
+  }
+  return best;
+}
+
+function nearestRuas(
+  point: Point,
+  fc: FeatureCollection
+): { kode: string; nama: string; meters: number } | null {
+  let best: { d2: number; kode: string; nama: string } | null = null;
+  for (const f of fc.features) {
+    if (!f.geometry || f.geometry.type !== "LineString") continue;
+    const coords = f.geometry.coordinates as [number, number][];
+    if (!coords.length) continue;
+    const d2 = distSqToCoords(
+      [point.coordinates[0], point.coordinates[1]],
+      coords
+    );
+    if (!best || d2 < best.d2) {
+      const p = (f.properties ?? {}) as Record<string, unknown>;
+      best = {
+        d2,
+        kode: String(p.kode_number ?? ""),
+        nama: String(p.nama ?? ""),
+      };
+    }
+  }
+  if (!best) return null;
+  // d2 mixes cos-scaled lng² and raw lat² (degrees); the averaged
+  // degree→meter factor lands within ~1% across Jabar's latitudes.
+  const latRad = (point.coordinates[1] * Math.PI) / 180;
+  const degToM = (111320 * Math.cos(latRad) + 111320) / 2;
+  return { kode: best.kode, nama: best.nama, meters: Math.sqrt(best.d2) * degToM };
 }
 
 type GeoProps = Record<string, unknown>;
@@ -230,6 +321,7 @@ export default function DatasetEditor() {
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const hasFittedRef = useRef(false);
   const featuresRef = useRef<FeatureCollection | null>(null);
+  const applyRuasColorsRef = useRef<() => void>(() => {});
   const activeToolRef = useRef<"select" | "pan" | "draw">("select");
   const dragRef = useRef<{
     featureId: string;
@@ -285,6 +377,21 @@ export default function DatasetEditor() {
   const [clusterMode, setClusterMode] = useState(false);
   const clusterModeRef = useRef(false);
 
+  /* ---- per-ruas reference coloring + nearest-ruas autofill ---- */
+  const roadsBgRef = useRef<FeatureCollection | null>(null);
+  const [distinctRuas, setDistinctRuas] = useState(
+    () => localStorage.getItem(`ruas_colors_${datasetId}`) === "true"
+  );
+  const distinctRuasRef = useRef(distinctRuas);
+  const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
+  const [nearestHint, setNearestHint] = useState<string | null>(null);
+
+  /* ---- basemap switcher (default bright for every dataset) ---- */
+  const [basemapId, setBasemapId] = useState<BasemapId>(() => {
+    return getBasemap(localStorage.getItem("ed_basemap")).id;
+  });
+  const basemapIdRef = useRef(basemapId);
+
   /* ---- undo / redo ---- */
   type UndoOp =
     | { type: "create"; geometry: Geometry; properties: Record<string, unknown>; region: string; sourceId: string }
@@ -328,6 +435,8 @@ export default function DatasetEditor() {
     setSelectedFeature(null);
     setPendingGeometry(null);
     setFormMode("create");
+    setNearestPrefill(null);
+    setNearestHint(null);
     setSelectedIds([]);
     if (tdRef.current) {
       tdRef.current.clear();
@@ -467,6 +576,50 @@ export default function DatasetEditor() {
     );
     showToast(next ? "Jendela edit dibuka" : "Jendela edit ditutup", true);
   }, [editWindow, datasetId, profile?.id, showToast]);
+
+  /* Recolor the ruas reference layer: distinct per-ruas colors when the
+     legend toggle is on, neutral grey otherwise. */
+  const applyRuasColors = useCallback(() => {
+    const map = mapRef.current;
+    const fc = roadsBgRef.current;
+    if (!map || !map.getLayer("roads-bg-line")) return;
+    if (distinctRuasRef.current && fc) {
+      for (const f of fc.features) {
+        const p = (f.properties ?? {}) as Record<string, unknown>;
+        f.properties = {
+          ...p,
+          _ruas_color: ruasColor(String(p.kode_number ?? p.nama ?? f.id ?? "")),
+        };
+      }
+      const src = map.getSource("roads-bg");
+      if (src && "setData" in src) {
+        (src as maplibregl.GeoJSONSource).setData(fc);
+      }
+      map.setPaintProperty("roads-bg-line", "line-color", [
+        "get",
+        "_ruas_color",
+      ]);
+    } else {
+      map.setPaintProperty("roads-bg-line", "line-color", "#94a3b8");
+    }
+  }, []);
+
+  useEffect(() => {
+    applyRuasColorsRef.current = applyRuasColors;
+  }, [applyRuasColors]);
+
+  const handleToggleRuasColors = useCallback(() => {
+    setDistinctRuas((prev) => {
+      const next = !prev;
+      localStorage.setItem(`ruas_colors_${datasetId}`, String(next));
+      return next;
+    });
+  }, [datasetId]);
+
+  useEffect(() => {
+    distinctRuasRef.current = distinctRuas;
+    applyRuasColors();
+  }, [distinctRuas, applyRuasColors]);
 
   const handleSave = useCallback(
     async (values: GeoProps) => {
@@ -839,9 +992,9 @@ export default function DatasetEditor() {
         sources: {
           basemap: {
             type: "raster",
-            tiles: [basemapUrl()],
+            tiles: [getBasemap(basemapIdRef.current).url],
             tileSize: 256,
-            attribution: "© OpenStreetMap contributors © CARTO",
+            attribution: getBasemap(basemapIdRef.current).attribution,
           },
         },
         layers: [
@@ -920,12 +1073,14 @@ export default function DatasetEditor() {
           .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
           .then(({ data }) => {
             if (!data) return;
+            roadsBgRef.current = data as FeatureCollection;
             const src = map.getSource("roads-bg");
             if (src && "setData" in src) {
               (src as maplibregl.GeoJSONSource).setData(
                 data as FeatureCollection
               );
             }
+            applyRuasColorsRef.current();
           });
       }
 
@@ -1125,6 +1280,32 @@ export default function DatasetEditor() {
           );
           if (drawn) {
             const geom = drawn.geometry as Point | LineString;
+
+            // Rambu workflow: prefill kode/nama from the nearest ruas so
+            // penitikan di lapangan tidak mengetik manual.
+            if (
+              datasetId === "rambu" &&
+              geom.type === "Point" &&
+              roadsBgRef.current?.features.length
+            ) {
+              const nr = nearestRuas(geom as Point, roadsBgRef.current);
+              if (nr) {
+                setNearestPrefill({
+                  kode_ruas: nr.kode,
+                  nama_ruas: nr.nama,
+                });
+                setNearestHint(
+                  `Terisi otomatis dari ruas terdekat: ${nr.kode} — ${nr.nama} (${Math.round(nr.meters)} m)`
+                );
+              } else {
+                setNearestPrefill(null);
+                setNearestHint(null);
+              }
+            } else {
+              setNearestPrefill(null);
+              setNearestHint(null);
+            }
+
             setPendingGeometry(geom);
             setFormMode("create");
             setSelectedFeature(null);
@@ -1149,21 +1330,17 @@ export default function DatasetEditor() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- switch basemap tiles when theme changes ---- */
+  /* ---- swap basemap tiles when the user picks another one ---- */
   useEffect(() => {
-    const apply = () => {
-      const src = mapRef.current?.getSource("basemap");
-      if (src && "setTiles" in src) {
-        (src as maplibregl.RasterTileSource).setTiles([basemapUrl()]);
-      }
-    };
-    const mo = new MutationObserver(apply);
-    mo.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    return () => mo.disconnect();
-  }, []);
+    basemapIdRef.current = basemapId;
+    localStorage.setItem("ed_basemap", basemapId);
+    const src = mapRef.current?.getSource("basemap");
+    if (src && "setTiles" in src) {
+      (src as maplibregl.RasterTileSource).setTiles([
+        getBasemap(basemapId).url,
+      ]);
+    }
+  }, [basemapId]);
 
   /* ---- keep activeTool ref in sync for event handlers ---- */
   useEffect(() => {
@@ -2110,11 +2287,38 @@ export default function DatasetEditor() {
               <div className="ed-legend-item">
                 <span
                   className="ed-legend-swatch-line"
-                  style={{ backgroundColor: "#94a3b8" }}
+                  style={{
+                    background: distinctRuas
+                      ? "linear-gradient(90deg,#ef4444,#eab308,#22c55e,#3b82f6)"
+                      : "#94a3b8",
+                  }}
                 />
                 <span className="ed-legend-label">Ruas jalan (referensi)</span>
+                <button
+                  type="button"
+                  className={`ed-legend-toggle${distinctRuas ? " on" : ""}`}
+                  onClick={handleToggleRuasColors}
+                  title="Warna berbeda untuk tiap ruas — memudahkan melihat batas antar ruas"
+                >
+                  {distinctRuas ? "Warna unik" : "Seragam"}
+                </button>
               </div>
             )}
+          </div>
+
+          {/* ---- Basemap picker ---- */}
+          <div className="ed-basemap" role="group" aria-label="Pilih basemap">
+            {BASEMAPS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                className={`ed-basemap-opt${basemapId === b.id ? " on" : ""}`}
+                onClick={() => setBasemapId(b.id)}
+                title={`Basemap ${b.label}`}
+              >
+                {b.label}
+              </button>
+            ))}
           </div>
 
           {/* ---- Empty state ---- */}
@@ -2164,11 +2368,15 @@ export default function DatasetEditor() {
               canDelete={isSuperAdmin || isEditor}
               onSave={handleSave}
               onDelete={handleDelete}
+              prefill={nearestPrefill}
+              hint={nearestHint}
               onClose={() => {
                 setFormOpen(false);
                 setSelectedFeature(null);
                 setPendingGeometry(null);
                 setFormMode("create");
+                setNearestPrefill(null);
+                setNearestHint(null);
                 tdRef.current?.clear();
                 closePopup();
               }}

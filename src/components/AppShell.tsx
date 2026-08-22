@@ -17,6 +17,21 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem("sidebar_collapsed") === "1";
   });
+  // Off-canvas drawer state — phones get an overlay menu instead of the
+  // persistent sidebar, driven by the same toggle button.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isMobileViewport = () =>
+    window.matchMedia("(max-width: 820px)").matches;
+
+  const handleToggleSidebar = () => {
+    if (isMobileViewport()) {
+      setMobileNavOpen((v) => !v);
+      return;
+    }
+    toggleSidebar();
+  };
+
+  const closeMobileNav = () => setMobileNavOpen(false);
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
 
   useEffect(() => {
@@ -52,8 +67,10 @@ export default function AppShell() {
   };
 
   return (
-    <div className={`shell ${collapsed ? "shell-collapsed" : ""}`}>
-      {!collapsed && (
+    <div
+      className={`shell ${collapsed ? "shell-collapsed" : ""} ${mobileNavOpen ? "nav-open" : ""}`}
+    >
+      {(!collapsed || mobileNavOpen) && (
         <aside className="sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-brand-mark" aria-hidden="true">
@@ -69,7 +86,7 @@ export default function AppShell() {
 
           <nav className="sidebar-nav">
             <div className="sidebar-nav-section">Navigasi</div>
-            <NavLink to="/" end className="nav-item">
+            <NavLink to="/" end className="nav-item" onClick={closeMobileNav}>
               <svg className="nav-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="9" rx="1" />
                 <rect x="14" y="3" width="7" height="5" rx="1" />
@@ -79,7 +96,7 @@ export default function AppShell() {
               <span>Ringkasan</span>
             </NavLink>
             {DATASETS.map((d) => (
-              <NavLink key={d.id} to={`/dataset/${d.id}`} className="nav-item">
+              <NavLink key={d.id} to={`/dataset/${d.id}`} className="nav-item" onClick={closeMobileNav}>
                 <span className="nav-dot" style={{ backgroundColor: d.defaultColor }} aria-hidden="true" />
                 <span>{d.label}</span>
               </NavLink>
@@ -87,7 +104,7 @@ export default function AppShell() {
             {isAdmin && (
               <>
                 <div className="sidebar-nav-section">Admin</div>
-                <NavLink to="/admin" className="nav-item">
+                <NavLink to="/admin" className="nav-item" onClick={closeMobileNav}>
                   <svg className="nav-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
@@ -96,7 +113,7 @@ export default function AppShell() {
                   </svg>
                   <span>Pengguna &amp; Peran</span>
                 </NavLink>
-                <NavLink to="/audit" className="nav-item">
+                <NavLink to="/audit" className="nav-item" onClick={closeMobileNav}>
                   <svg className="nav-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 8v4l3 2" />
                     <circle cx="12" cy="12" r="9" />
@@ -130,9 +147,17 @@ export default function AppShell() {
         </aside>
       )}
 
+      {mobileNavOpen && (
+        <div
+          className="nav-backdrop"
+          onClick={closeMobileNav}
+          aria-hidden="true"
+        />
+      )}
+
       <main className="content">
         <div className="content-topbar">
-          <button className="sidebar-toggle" onClick={toggleSidebar} title={collapsed ? "Buka menu" : "Tutup menu"} aria-label="Toggle sidebar">
+          <button className="sidebar-toggle" onClick={handleToggleSidebar} title={collapsed ? "Buka menu" : "Tutup menu"} aria-label="Toggle sidebar">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               {collapsed ? (
                 <polyline points="9 18 15 12 9 6" />

@@ -14,6 +14,8 @@ interface Props {
   onDelete: () => void;
   onClose: () => void;
   saving: boolean;
+  prefill?: GeoProps | null;
+  hint?: string | null;
 }
 
 export default function AttributeForm({
@@ -26,6 +28,8 @@ export default function AttributeForm({
   onDelete,
   onClose,
   saving,
+  prefill,
+  hint,
 }: Props) {
   const [values, setValues] = useState<Record<string, string | number>>({});
 
@@ -37,8 +41,17 @@ export default function AttributeForm({
       const v = src[f.key];
       init[f.key] = v != null ? (typeof v === "number" ? v : String(v)) : "";
     }
+    // Create-mode autofill (e.g. nearest-ruas lookup) only fills empty
+    // fields — never overwrites something the user already typed.
+    if (mode === "create" && prefill) {
+      for (const f of meta.formFields) {
+        if (init[f.key] !== "") continue;
+        const v = prefill[f.key];
+        if (v != null && v !== "") init[f.key] = String(v);
+      }
+    }
     setValues(init);
-  }, [feature, mode, meta.formFields]);
+  }, [feature, mode, meta.formFields, prefill]);
 
   const handleChange = (key: string, val: string | number) => {
     setValues((prev) => ({ ...prev, [key]: val }));
@@ -77,6 +90,9 @@ export default function AttributeForm({
       )}
 
       <form className="ed-form" onSubmit={handleSubmit}>
+        {hint && mode === "create" && (
+          <div className="ed-autofill-hint">{hint}</div>
+        )}
         {meta.formFields.map((field) => (
           <label key={field.key} className="ed-form-field">
             <span className="ed-form-label">{field.label}</span>
