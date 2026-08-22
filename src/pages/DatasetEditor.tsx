@@ -336,6 +336,9 @@ export default function DatasetEditor() {
     y2: number;
   } | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  // Mobile: toolbox + legend collapse behind one FAB (bottom sheet) so
+  // the map stays fully visible on phones/landscape.
+  const [mobileDockOpen, setMobileDockOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "update">("create");
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
   const [pendingGeometry, setPendingGeometry] = useState<Geometry | null>(null);
@@ -2163,7 +2166,7 @@ export default function DatasetEditor() {
   }
 
   return (
-    <div className="ed-root">
+    <div className={`ed-root${mobileDockOpen ? " tools-open" : ""}`}>
       
 
       {/* -------- map + overlays -------- */}
@@ -2189,27 +2192,92 @@ export default function DatasetEditor() {
           </div>
         </div>
 
-          {/* ---- Floating Toolbox (Excalidraw-style) ---- */}
-          {(isSuperAdmin || isEditor) && (
-            <div className="ed-toolbox">
-              {visibleToolboxBtns.map((btn, i) => (
-                <Fragment key={btn.key}>
-                  {i > 0 && visibleToolboxBtns[i - 1].group !== btn.group && (
-                    <div className="ed-toolbox-divider" />
-                  )}
+          {/* ---- Floating Toolbox + Legend (mobile: bottom sheet) ---- */}
+          <div className={`ed-dock${mobileDockOpen ? " open" : ""}`}>
+            {(isSuperAdmin || isEditor) && (
+              <div className="ed-toolbox">
+                {visibleToolboxBtns.map((btn, i) => (
+                  <Fragment key={btn.key}>
+                    {i > 0 && visibleToolboxBtns[i - 1].group !== btn.group && (
+                      <div className="ed-toolbox-divider" />
+                    )}
+                    <button
+                      className={`ed-toolbox-btn${btn.active ? " ed-toolbox-btn-active" : ""}${btn.className ? ` ${btn.className}` : ""}`}
+                      onClick={() => {
+                        btn.onClick();
+                        setMobileDockOpen(false);
+                      }}
+                      disabled={btn.disabled}
+                      title={`${i + 1}. ${btn.title}`}
+                    >
+                      <span className="ed-toolbox-key">{i + 1}</span>
+                      {btn.icon}
+                    </button>
+                  </Fragment>
+                ))}
+              </div>
+            )}
+
+            {/* Legend rides inside the mobile sheet; on desktop CSS keeps
+                both children at their own absolute positions. */}
+            <div className="ed-legend">
+              <div className="ed-legend-item">
+                {isPoint ? (
+                  <span
+                    className="ed-legend-swatch"
+                    style={{ backgroundColor: meta.defaultColor }}
+                  />
+                ) : (
+                  <span
+                    className="ed-legend-swatch-line"
+                    style={{ backgroundColor: meta.defaultColor }}
+                  />
+                )}
+                <span className="ed-legend-label">Fitur (master)</span>
+              </div>
+              {datasetId !== "ruas_jalan" && (
+                <div className="ed-legend-item">
+                  <span
+                    className="ed-legend-swatch-line"
+                    style={{
+                      background: distinctRuas
+                        ? "linear-gradient(90deg,#ef4444,#eab308,#22c55e,#3b82f6)"
+                        : "#94a3b8",
+                    }}
+                  />
+                  <span className="ed-legend-label">Ruas jalan (referensi)</span>
                   <button
-                    className={`ed-toolbox-btn${btn.active ? " ed-toolbox-btn-active" : ""}${btn.className ? ` ${btn.className}` : ""}`}
-                    onClick={btn.onClick}
-                    disabled={btn.disabled}
-                    title={`${i + 1}. ${btn.title}`}
+                    type="button"
+                    className={`ed-legend-toggle${distinctRuas ? " on" : ""}`}
+                    onClick={handleToggleRuasColors}
+                    title="Warna berbeda untuk tiap ruas — memudahkan melihat batas antar ruas"
                   >
-                    <span className="ed-toolbox-key">{i + 1}</span>
-                    {btn.icon}
+                    {distinctRuas ? "Warna unik" : "Seragam"}
                   </button>
-                </Fragment>
-              ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* FAB — visible on small screens only; toggles the tool sheet */}
+          <button
+            type="button"
+            className="ed-dock-fab"
+            onClick={() => setMobileDockOpen((v) => !v)}
+            aria-label={mobileDockOpen ? "Tutup alat" : "Buka alat"}
+            aria-expanded={mobileDockOpen}
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {mobileDockOpen ? (
+                <>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </>
+              ) : (
+                <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+              )}
+            </svg>
+          </button>
 
           {/* ---- Marquee overlay (select tool) ---- */}
           {activeTool === "select" && marquee && (
@@ -2245,45 +2313,6 @@ export default function DatasetEditor() {
               </button>
             </div>
           )}
-
-          {/* ---- Legend ---- */}
-          <div className="ed-legend">
-            <div className="ed-legend-item">
-              {isPoint ? (
-                <span
-                  className="ed-legend-swatch"
-                  style={{ backgroundColor: meta.defaultColor }}
-                />
-              ) : (
-                <span
-                  className="ed-legend-swatch-line"
-                  style={{ backgroundColor: meta.defaultColor }}
-                />
-              )}
-              <span className="ed-legend-label">Fitur (master)</span>
-            </div>
-            {datasetId !== "ruas_jalan" && (
-              <div className="ed-legend-item">
-                <span
-                  className="ed-legend-swatch-line"
-                  style={{
-                    background: distinctRuas
-                      ? "linear-gradient(90deg,#ef4444,#eab308,#22c55e,#3b82f6)"
-                      : "#94a3b8",
-                  }}
-                />
-                <span className="ed-legend-label">Ruas jalan (referensi)</span>
-                <button
-                  type="button"
-                  className={`ed-legend-toggle${distinctRuas ? " on" : ""}`}
-                  onClick={handleToggleRuasColors}
-                  title="Warna berbeda untuk tiap ruas — memudahkan melihat batas antar ruas"
-                >
-                  {distinctRuas ? "Warna unik" : "Seragam"}
-                </button>
-              </div>
-            )}
-          </div>
 
           {/* ---- Empty state ---- */}
           {features.features.length === 0 && !initialLoading && (
