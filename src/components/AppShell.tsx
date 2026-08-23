@@ -21,11 +21,22 @@ export default function AppShell() {
   // Off-canvas drawer state — phones get an overlay menu instead of the
   // persistent sidebar, driven by the same toggle button.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const isMobileViewport = () =>
-    window.matchMedia("(max-width: 820px)").matches;
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia("(max-width: 820px)").matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      if (!e.matches) setMobileNavOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   const handleToggleSidebar = () => {
-    if (isMobileViewport()) {
+    if (isMobile) {
       setMobileNavOpen((v) => !v);
       return;
     }
@@ -62,6 +73,8 @@ export default function AppShell() {
     });
   };
 
+  const drawerOpen = isMobile ? mobileNavOpen : !collapsed;
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/login", { replace: true });
@@ -71,8 +84,7 @@ export default function AppShell() {
     <div
       className={`shell ${collapsed ? "shell-collapsed" : ""} ${mobileNavOpen ? "nav-open" : ""}`}
     >
-      {(!collapsed || mobileNavOpen) && (
-        <aside className="sidebar">
+      <aside className="sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-brand-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -146,7 +158,6 @@ export default function AppShell() {
             </button>
           </div>
         </aside>
-      )}
 
       {mobileNavOpen && (
         <div
@@ -158,12 +169,12 @@ export default function AppShell() {
 
       <main className="content">
         <div className="content-topbar">
-          <button className="sidebar-toggle" onClick={handleToggleSidebar} title={collapsed ? "Buka menu" : "Tutup menu"} aria-label="Toggle sidebar">
+          <button className="sidebar-toggle" onClick={handleToggleSidebar} title={drawerOpen ? "Tutup menu" : "Buka menu"} aria-label="Toggle sidebar">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {collapsed ? (
-                <polyline points="9 18 15 12 9 6" />
-              ) : (
+              {drawerOpen ? (
                 <polyline points="15 18 9 12 15 6" />
+              ) : (
+                <polyline points="9 18 15 12 9 6" />
               )}
             </svg>
           </button>
