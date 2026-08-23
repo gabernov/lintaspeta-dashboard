@@ -3239,6 +3239,83 @@ body {
   font-weight: 600;
 }
 
+/* ---- Theme toggle ---- */
+.landing-theme {
+  position: relative;
+}
+.landing-theme-btn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--glass-soft);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+.landing-theme-btn:hover {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-strong);
+}
+.landing-theme-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  min-width: 150px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-soft-3);
+  box-shadow: 0 16px 40px rgba(2, 8, 23, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: landing-drawer-in 0.18s ease;
+}
+.landing-theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--landing-text-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: var(--landing-font);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.landing-theme-option:hover {
+  background: var(--border-soft-4);
+  color: var(--text);
+}
+.landing-theme-option-active {
+  color: var(--text);
+  background: var(--accent-tint);
+}
+.landing-theme-option-active svg {
+  color: var(--accent);
+}
+
+/* ---- Legal topbar actions ---- */
+.landing-legal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* ---- Focus ---- */
 .landing a:focus-visible,
 .landing button:focus-visible {

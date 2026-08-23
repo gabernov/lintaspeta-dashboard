@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/LandingFooter";
+import LandingThemeToggle from "../components/LandingThemeToggle";
 
 /* ---------- data ---------- */
 
@@ -251,6 +252,7 @@ export default function LandingPage() {
           </nav>
 
           <div className="landing-nav-actions">
+            <LandingThemeToggle />
             <Link className="landing-btn landing-btn-primary landing-btn-sm" to="/login">
               Masuk
             </Link>

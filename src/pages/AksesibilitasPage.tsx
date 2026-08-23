@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/LandingFooter";
+import LandingThemeToggle from "../components/LandingThemeToggle";
 
 function BrandMark({ size = 24 }: { size?: number }) {
   return (
@@ -52,10 +53,13 @@ export default function AksesibilitasPage() {
               <span className="landing-brand-sub">Lalu Lintas &amp; Integrasi Statistik</span>
             </span>
           </Link>
-          <Link className="landing-legal-back" to="/">
-            <BackArrowIcon />
-            Beranda
-          </Link>
+          <div className="landing-legal-actions">
+            <LandingThemeToggle />
+            <Link className="landing-legal-back" to="/">
+              <BackArrowIcon />
+              Beranda
+            </Link>
+          </div>
         </div>
       </header>
 
