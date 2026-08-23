@@ -3,6 +3,7 @@ import { useAuth } from "./auth/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import AppShell from "./components/AppShell";
 import DashboardHome from "./pages/DashboardHome";
+import LandingPage from "./pages/LandingPage";
 import DatasetEditor from "./pages/DatasetEditor";
 import AuditPage from "./pages/AuditPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
@@ -24,9 +25,10 @@ function Protected({ children, roles }: { children: React.ReactNode; roles?: Rol
 export default function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
-        path="/"
+        path="/app"
         element={
           <Protected>
             <AppShell />

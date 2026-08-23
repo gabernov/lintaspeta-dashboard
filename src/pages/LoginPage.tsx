@@ -14,7 +14,7 @@ export default function LoginPage() {
   const { session } = useAuth();
 
   if (session) {
-    navigate("/", { replace: true });
+    navigate("/app", { replace: true });
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -26,7 +26,7 @@ export default function LoginPage() {
       if (mode === "password") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/", { replace: true });
+        navigate("/app", { replace: true });
       } else {
         const { error } = await supabase.auth.signInWithOtp({ email });
         if (error) throw error;

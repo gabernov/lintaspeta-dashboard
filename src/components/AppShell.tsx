@@ -99,7 +99,7 @@ export default function AppShell() {
 
           <nav className="sidebar-nav">
             <div className="sidebar-nav-section">Navigasi</div>
-            <NavLink to="/" end className="nav-item" onClick={closeMobileNav}>
+            <NavLink to="/app" end className="nav-item" onClick={closeMobileNav}>
               <svg className="nav-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="9" rx="1" />
                 <rect x="14" y="3" width="7" height="5" rx="1" />
