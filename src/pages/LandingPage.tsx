@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import LandingFooter from "../components/LandingFooter";
 
 /* ---------- data ---------- */
 
@@ -10,7 +11,7 @@ const NAV_LINKS = [
 ];
 
 const STATS = [
-  { value: "4", label: "Dataset Terintegrasi" },
+  { value: "4+", label: "Dataset Terintegrasi" },
   { value: "27", label: "Kabupaten / Kota" },
   { value: "4", label: "Wilayah UPTD" },
   { value: "2", label: "Mode Publikasi (draft & terbit)" },
@@ -96,8 +97,16 @@ const STEPS = [
 
 const HERO_CHIPS = [
   { num: "27", lbl: "Kabupaten / Kota", accent: "#2563eb", pos: "landing-hero-chip-1" },
-  { num: "4", lbl: "Dataset Terintegrasi", accent: "#16a34a", pos: "landing-hero-chip-2" },
+  { num: "4+", lbl: "Dataset Terintegrasi", accent: "#16a34a", pos: "landing-hero-chip-2" },
   { num: "UPTD I–IV", lbl: "Wilayah Kerja", accent: "#d97706", pos: "landing-hero-chip-3" },
+];
+
+const COMING_SOON = [
+  "CCTV",
+  "Kinerja Ruas Jalan",
+  "Tarikan & Bangkitan",
+  "Pengajuan Andalalin",
+  "Perusahaan Karoseri",
 ];
 
 /* ---------- icons ---------- */
@@ -405,7 +414,7 @@ export default function LandingPage() {
         <div className="landing-section-head landing-reveal">
           <span className="landing-section-eyebrow">Dataset</span>
           <h2 className="landing-section-title">Apa yang Kami Kelola</h2>
-          <p className="landing-section-sub">Empat lapisan data transportasi dalam satu peta.</p>
+          <p className="landing-section-sub">Lapisan data transportasi dalam satu peta — dan terus bertambah.</p>
         </div>
         <div className="landing-datasets">
           {DATASETS.map((ds, i) => (
@@ -438,6 +447,16 @@ export default function LandingPage() {
               <p className="landing-card-desc">{ds.desc}</p>
             </article>
           ))}
+        </div>
+        <div className="landing-coming landing-reveal">
+          <h3 className="landing-coming-title">Segera hadir</h3>
+          <div className="landing-coming-pills">
+            {COMING_SOON.map((item) => (
+              <span key={item} className="landing-coming-pill">
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -479,21 +498,7 @@ export default function LandingPage() {
       </section>
 
       {/* ---------- Footer ---------- */}
-      <footer className="landing-footer">
-        <div className="landing-footer-inner">
-          <div className="landing-footer-brand">
-            <span className="landing-brand-mark">
-              <BrandMark size={20} />
-            </span>
-            <span className="landing-footer-brand-text">
-              <span className="landing-footer-name">Lintas</span>
-              <span className="landing-footer-tagline">Lalu Lintas dan Integrasi Statistik</span>
-            </span>
-          </div>
-          <p className="landing-footer-org">Dinas Perhubungan Provinsi Jawa Barat</p>
-          <p className="landing-footer-copy">© 2026 Dinas Perhubungan Provinsi Jawa Barat</p>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   );
 }

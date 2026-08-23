@@ -4,6 +4,9 @@ import LoginPage from "./pages/LoginPage";
 import AppShell from "./components/AppShell";
 import DashboardHome from "./pages/DashboardHome";
 import LandingPage from "./pages/LandingPage";
+import PrivasiPage from "./pages/PrivasiPage";
+import KetentuanPage from "./pages/KetentuanPage";
+import AksesibilitasPage from "./pages/AksesibilitasPage";
 import DatasetEditor from "./pages/DatasetEditor";
 import AuditPage from "./pages/AuditPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
@@ -26,6 +29,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/privasi" element={<PrivasiPage />} />
+      <Route path="/ketentuan" element={<KetentuanPage />} />
+      <Route path="/aksesibilitas" element={<AksesibilitasPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/app"
