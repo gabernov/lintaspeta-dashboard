@@ -377,11 +377,8 @@ export default function LandingPage() {
             className="landing-hero-actions landing-reveal"
             style={{ "--reveal-delay": "300ms" } as CSSProperties}
           >
-            <Link className="landing-btn landing-btn-primary" to="/login">
-              Masuk ke Dashboard
-            </Link>
             <a
-              className="landing-btn landing-btn-ghost"
+              className="landing-btn landing-btn-primary"
               href="https://peta.dishubjabar.com"
               target="_blank"
               rel="noreferrer"
@@ -389,7 +386,16 @@ export default function LandingPage() {
               Lihat Peta Publik
               <ArrowUpRightIcon />
             </a>
+            <Link className="landing-btn landing-btn-ghost" to="/login">
+              Masuk untuk Editor
+            </Link>
           </div>
+          <p
+            className="landing-hero-hint landing-reveal"
+            style={{ "--reveal-delay": "360ms" } as CSSProperties}
+          >
+            Peta publik terbuka untuk umum · editor resmi Dishub Jabar masuk untuk mengelola data
+          </p>
         </div>
       </section>
 

@@ -2336,7 +2336,7 @@ body {
   --landing-text-2: #465569;
 }
 
-.landing a {
+.landing :where(a) {
   color: inherit;
 }
 
@@ -2709,6 +2709,13 @@ body {
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 6px;
+}
+.landing-hero-hint {
+  margin: -14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--landing-text-2);
+  text-align: center;
 }
 
 /* ---- Stats band ---- */
