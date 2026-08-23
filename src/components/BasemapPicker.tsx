@@ -50,9 +50,9 @@ export default function BasemapPicker() {
         aria-expanded={open}
       >
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z" />
-          <path d="M9 4v14" />
-          <path d="M15 6v14" />
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 12 12 17 22 12" />
+          <polyline points="2 17 12 22 22 17" />
         </svg>
       </button>
       {open && (
