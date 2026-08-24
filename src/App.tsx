@@ -17,6 +17,12 @@ function DatasetEditorRoute() {
   return <DatasetEditor key={datasetId} />;
 }
 
+// Legacy URLs from before the dashboard moved under /app — keep old bookmarks working.
+function LegacyDatasetRedirect() {
+  const { datasetId } = useParams<{ datasetId: string }>();
+  return <Navigate to={`/app/dataset/${datasetId}`} replace />;
+}
+
 function Protected({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
   const { session, loading, profile } = useAuth();
   if (loading) return <div className="page-loading">Memuat…</div>;
@@ -33,6 +39,9 @@ export default function App() {
       <Route path="/ketentuan" element={<KetentuanPage />} />
       <Route path="/aksesibilitas" element={<AksesibilitasPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/dataset/:datasetId" element={<LegacyDatasetRedirect />} />
+      <Route path="/audit" element={<Navigate to="/app/audit" replace />} />
+      <Route path="/admin" element={<Navigate to="/app/admin" replace />} />
       <Route
         path="/app"
         element={
