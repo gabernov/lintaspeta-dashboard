@@ -355,6 +355,9 @@ export default function DatasetEditor() {
 
   /* ---- per-ruas reference coloring + nearest-ruas autofill ---- */
   const roadsBgRef = useRef<FeatureCollection | null>(null);
+  const rambuLookupRef = useRef<Map<string, { kelas_jalan: string; fungsi: string }>>(
+    new Map()
+  );
   const [distinctRuas, setDistinctRuas] = useState(
     () => localStorage.getItem(`ruas_colors_${datasetId}`) === "true"
   );
@@ -1064,6 +1067,24 @@ export default function DatasetEditor() {
             }
             applyRuasColorsRef.current();
           });
+        if (datasetId === "rambu") {
+          supabase
+            .from("rambu_draft")
+            .select("properties")
+            .then(({ data: rows }) => {
+              const lookup = new Map<string, { kelas_jalan: string; fungsi: string }>();
+              for (const row of rows ?? []) {
+                const p = (row as { properties?: Record<string, unknown> }).properties ?? {};
+                const kode = String(p.kode_ruas ?? "");
+                if (!kode || lookup.has(kode)) continue;
+                lookup.set(kode, {
+                  kelas_jalan: String(p.kelas_jalan ?? ""),
+                  fungsi: String(p.fungsi ?? ""),
+                });
+              }
+              rambuLookupRef.current = lookup;
+            });
+        }
       }
 
       map.addSource("draft", {
@@ -1263,9 +1284,9 @@ export default function DatasetEditor() {
           if (drawn) {
             const geom = drawn.geometry as Point | LineString;
 
-            // Rambu: copy road metadata (kode_number, nama, status, panjang_km) into the
-// new rambu so field capture doesn't retype it. kelas_jalan/fungsi stay manual
-// — ruas_jalan has no such attribute to inherit.
+            // Rambu: copy road metadata (kode_number, nama, status, panjang_km)
+            // plus the road's kelas_jalan/fungsi (from the rambu lookup built
+            // from existing rambu rows, which carry them per kode_ruas).
             if (
               datasetId === "rambu" &&
               geom.type === "Point" &&
@@ -1276,11 +1297,14 @@ export default function DatasetEditor() {
                 const rp = nr.props;
                 const kode = String(rp.kode_number ?? "");
                 const nama = String(rp.nama ?? "");
+                const cls = rambuLookupRef.current.get(kode);
                 setNearestPrefill({
                   kode_ruas: kode,
                   nama_ruas: nama,
                   status: String(rp.status ?? ""),
                   panjang_km: rp.panjang_km != null ? Number(rp.panjang_km) : "",
+                  kelas_jalan: cls?.kelas_jalan ?? "",
+                  fungsi: cls?.fungsi ?? "",
                 });
                 const parts = [`${kode} — ${nama} (${Math.round(nr.meters)} m)`];
                 if (kode || nama) {
