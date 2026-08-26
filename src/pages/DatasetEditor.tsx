@@ -63,23 +63,24 @@ function distSqToCoords(
 function nearestRuas(
   point: Point,
   fc: FeatureCollection
-): { kode: string; nama: string; meters: number } | null {
-  let best: { d2: number; kode: string; nama: string } | null = null;
+): { props: Record<string, unknown>; meters: number } | null {
+  let best: { d2: number; props: Record<string, unknown> } | null = null;
   for (const f of fc.features) {
-    if (!f.geometry || f.geometry.type !== "LineString") continue;
-    const coords = f.geometry.coordinates as [number, number][];
-    if (!coords.length) continue;
-    const d2 = distSqToCoords(
-      [point.coordinates[0], point.coordinates[1]],
-      coords
-    );
-    if (!best || d2 < best.d2) {
-      const p = (f.properties ?? {}) as Record<string, unknown>;
-      best = {
-        d2,
-        kode: String(p.kode_number ?? ""),
-        nama: String(p.nama ?? ""),
-      };
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type !== "LineString" && g.type !== "MultiLineString") continue;
+    const parts =
+      g.type === "LineString" ? [g.coordinates] : g.coordinates;
+    for (const raw of parts) {
+      const coords = raw as [number, number][];
+      if (!coords.length) continue;
+      const d2 = distSqToCoords(
+        [point.coordinates[0], point.coordinates[1]],
+        coords
+      );
+      if (!best || d2 < best.d2) {
+        best = { d2, props: (f.properties ?? {}) as Record<string, unknown> };
+      }
     }
   }
   if (!best) return null;
@@ -87,7 +88,7 @@ function nearestRuas(
   // degree→meter factor lands within ~1% across Jabar's latitudes.
   const latRad = (point.coordinates[1] * Math.PI) / 180;
   const degToM = (111320 * Math.cos(latRad) + 111320) / 2;
-  return { kode: best.kode, nama: best.nama, meters: Math.sqrt(best.d2) * degToM };
+  return { props: best.props, meters: Math.sqrt(best.d2) * degToM };
 }
 
 type GeoProps = Record<string, unknown>;
@@ -1262,8 +1263,9 @@ export default function DatasetEditor() {
           if (drawn) {
             const geom = drawn.geometry as Point | LineString;
 
-            // Rambu workflow: prefill kode/nama from the nearest ruas so
-            // penitikan di lapangan tidak mengetik manual.
+            // Rambu: copy road metadata (kode_number, nama, status, panjang_km) into the
+// new rambu so field capture doesn't retype it. kelas_jalan/fungsi stay manual
+// — ruas_jalan has no such attribute to inherit.
             if (
               datasetId === "rambu" &&
               geom.type === "Point" &&
@@ -1271,13 +1273,23 @@ export default function DatasetEditor() {
             ) {
               const nr = nearestRuas(geom as Point, roadsBgRef.current);
               if (nr) {
+                const rp = nr.props;
+                const kode = String(rp.kode_number ?? "");
+                const nama = String(rp.nama ?? "");
                 setNearestPrefill({
-                  kode_ruas: nr.kode,
-                  nama_ruas: nr.nama,
+                  kode_ruas: kode,
+                  nama_ruas: nama,
+                  status: String(rp.status ?? ""),
+                  panjang_km: rp.panjang_km != null ? Number(rp.panjang_km) : "",
                 });
-                setNearestHint(
-                  `Terisi otomatis dari ruas terdekat: ${nr.kode} — ${nr.nama} (${Math.round(nr.meters)} m)`
-                );
+                const parts = [`${kode} — ${nama} (${Math.round(nr.meters)} m)`];
+                if (kode || nama) {
+                  setNearestHint(
+                    `Terisi otomatis dari ruas terdekat: ${parts.join(", ")}`
+                  );
+                } else {
+                  setNearestHint(null);
+                }
               } else {
                 setNearestPrefill(null);
                 setNearestHint(null);
