@@ -4,10 +4,10 @@ import { BASEMAPS, ED_BASEMAP_EVENT, getBasemap } from "../lib/basemaps";
 
 /* Topbar dropdown: pick a raster basemap; the choice persists in
    localStorage and editors react via the ed-basemap window event.
-   Only rendered on map routes (pathname starts with /dataset/). */
+   Only rendered on map routes (pathname contains /dataset/). */
 export default function BasemapPicker() {
   const location = useLocation();
-  const isMapRoute = location.pathname.startsWith("/dataset/");
+  const isMapRoute = location.pathname.includes("/dataset/");
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(() => getBasemap(localStorage.getItem("ed_basemap")));
   const wrapRef = useRef<HTMLDivElement>(null);

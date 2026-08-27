@@ -1,5 +1,8 @@
 /* Raster basemap catalog shared by the topbar picker and the editor.
-   "bright" (CartoDB Voyager) is the default look per product request. */
+   "bright" (Esri World Street Map) is the default look per product request.
+   NOTE: previously used CARTO CDN (basemaps.cartocdn.com) but CARTO now
+   requires an API key and serves watermarked tiles; Esri ArcGIS raster
+   tiles are keyless and free for public use. */
 export interface BasemapOption {
   id: string;
   label: string;
@@ -11,20 +14,20 @@ export const BASEMAPS: BasemapOption[] = [
   {
     id: "bright",
     label: "Bright",
-    url: "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri, HERE, Garmin, © OpenStreetMap contributors",
   },
   {
     id: "positron",
     label: "Putih",
-    url: "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri, HERE, Garmin, © OpenStreetMap contributors",
   },
   {
     id: "dark",
     label: "Gelap",
-    url: "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-    attribution: "© OpenStreetMap contributors © CARTO",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Esri, HERE, Garmin, © OpenStreetMap contributors",
   },
   {
     id: "osm",
