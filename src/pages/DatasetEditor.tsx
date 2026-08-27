@@ -1313,17 +1313,27 @@ export default function DatasetEditor() {
               | maplibregl.GeoJSONSource
               | undefined;
             if (src) {
-              // Rebuild a clean feature: queryRenderedFeatures objects carry
-              // MapLibre internals that GeoJSONSource.setData silently rejects.
+              // Use the pristine feature from the original RPC data rather
+              // than the click-event object: queryRenderedFeatures features
+              // carry MapLibre internals that GeoJSONSource.setData silently
+              // rejects (source serializes with data but renders nothing).
+              const srcId = (roadFeat.properties as GeoProps | null)?._source_id;
+              const clean =
+                roadsBgRef.current?.features.find(
+                  (f) =>
+                    (f.properties as GeoProps | null)?._source_id === srcId
+                ) ??
+                roadsBgRef.current?.features.find(
+                  (f) =>
+                    (f.properties as GeoProps | null)?.kode_number ===
+                    (roadFeat.properties as GeoProps | null)?.kode_number
+                );
+              const cleanFeature = clean
+                ? clean
+                : JSON.parse(JSON.stringify(roadFeat));
               src.setData({
                 type: "FeatureCollection",
-                features: [
-                  {
-                    type: "Feature",
-                    geometry: roadFeat.geometry as Geometry,
-                    properties: (roadFeat.properties ?? {}) as Record<string, unknown>,
-                  },
-                ],
+                features: [cleanFeature as Feature],
               });
             }
             closePopup();
