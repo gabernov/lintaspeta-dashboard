@@ -30,7 +30,9 @@ function ruasColor(seed: string): string {
     h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0;
   }
   const hue = Math.abs(h) % 360;
-  return `hsl(${hue} 72% 46%)`;
+  // High saturation + high lightness so adjacent ruas pop clearly on both
+  // light and dark basemaps (was 72%/46% — too muddy).
+  return `hsl(${hue} 95% 62%)`;
 }
 
 /* Squared distance from point to a lng/lat vertex array — good enough
@@ -358,10 +360,15 @@ export default function DatasetEditor() {
   const rambuLookupRef = useRef<Map<string, { kelas_jalan: string; fungsi: string }>>(
     new Map()
   );
-  const [distinctRuas, setDistinctRuas] = useState(
-    () => localStorage.getItem(`ruas_colors_${datasetId}`) === "true"
-  );
-  const distinctRuasRef = useRef(distinctRuas);
+  const [roadInfo, setRoadInfo] = useState<Feature | null>(null);
+  // Road reference coloring mode: "rainbow" = per-ruas distinct hues,
+  // "uptd" = color per unit_kerja_kode, "default" = neutral grey.
+  type RoadColorMode = "default" | "rainbow" | "uptd";
+  const [roadColorMode, setRoadColorMode] = useState<RoadColorMode>(() => {
+    const saved = localStorage.getItem(`ruas_colors_${datasetId}`);
+    return saved === "rainbow" || saved === "uptd" ? saved : "default";
+  });
+  const roadColorModeRef = useRef(roadColorMode);
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
 
@@ -553,24 +560,42 @@ export default function DatasetEditor() {
     showToast(next ? "Jendela edit dibuka" : "Jendela edit ditutup", true);
   }, [editWindow, datasetId, profile?.id, showToast]);
 
-  /* Recolor the ruas reference layer: distinct per-ruas colors when the
-     legend toggle is on, neutral grey otherwise. */
+  /* Recolor the ruas reference layer: rainbow = per-ruas distinct hues,
+   uptd = color per unit_kerja_kode, default = neutral grey. */
   const applyRuasColors = useCallback(() => {
     const map = mapRef.current;
     const fc = roadsBgRef.current;
     if (!map || !map.getLayer("roads-bg-line")) return;
-    if (distinctRuasRef.current && fc) {
-      fc.features.forEach((f, idx) => {
-        const p = (f.properties ?? {}) as Record<string, unknown>;
-        // Index in the seed guarantees distinct hues even when the
-        // published payload carries no kode/nama properties.
-        f.properties = {
-          ...p,
-          _ruas_color: ruasColor(
-            `${String(p.kode_number ?? "")}|${String(p.nama ?? "")}|${idx}`
-          ),
-        };
-      });
+    const mode = roadColorModeRef.current;
+    if (mode !== "default" && fc) {
+      if (mode === "rainbow") {
+        fc.features.forEach((f, idx) => {
+          const p = (f.properties ?? {}) as Record<string, unknown>;
+          // Index in the seed guarantees distinct hues even when the
+          // published payload carries no kode/nama properties.
+          f.properties = {
+            ...p,
+            _ruas_color: ruasColor(
+              `${String(p.kode_number ?? "")}|${String(p.nama ?? "")}|${idx}`
+            ),
+          };
+        });
+      } else {
+        const uptdPalette = [
+          "#ef4444", "#f97316", "#eab308", "#22c55e",
+          "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899",
+        ];
+        const uptdMap = new Map<string, string>();
+        fc.features.forEach((f, idx) => {
+          const p = (f.properties ?? {}) as Record<string, unknown>;
+          const uptd = String(p.unit_kerja_kode ?? "");
+          const key = uptd || `_none_${idx}`;
+          if (!uptdMap.has(key)) {
+            uptdMap.set(key, uptdPalette[uptdMap.size % uptdPalette.length]);
+          }
+          f.properties = { ...p, _ruas_color: uptdMap.get(key) };
+        });
+      }
       const src = map.getSource("roads-bg");
       if (src && "setData" in src) {
         (src as maplibregl.GeoJSONSource).setData(fc);
@@ -588,18 +613,20 @@ export default function DatasetEditor() {
     applyRuasColorsRef.current = applyRuasColors;
   }, [applyRuasColors]);
 
+  const ROAD_MODE_CYCLE: RoadColorMode[] = ["rainbow", "uptd", "default"];
   const handleToggleRuasColors = useCallback(() => {
-    setDistinctRuas((prev) => {
-      const next = !prev;
-      localStorage.setItem(`ruas_colors_${datasetId}`, String(next));
+    setRoadColorMode((prev) => {
+      const next =
+        ROAD_MODE_CYCLE[(ROAD_MODE_CYCLE.indexOf(prev) + 1) % ROAD_MODE_CYCLE.length];
+      localStorage.setItem(`ruas_colors_${datasetId}`, next);
       return next;
     });
   }, [datasetId]);
 
   useEffect(() => {
-    distinctRuasRef.current = distinctRuas;
+    roadColorModeRef.current = roadColorMode;
     applyRuasColors();
-  }, [distinctRuas, applyRuasColors]);
+  }, [roadColorMode, applyRuasColors]);
 
   const handleSave = useCallback(
     async (values: GeoProps) => {
@@ -1054,6 +1081,67 @@ export default function DatasetEditor() {
             "line-opacity": 0.7,
           },
         });
+        // Invisible wide hit layer: makes thin reference roads easy to click.
+        map.addLayer({
+          id: "roads-bg-hit",
+          type: "line",
+          source: "roads-bg",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "rgba(0,0,0,0)",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 8,
+              10, 10,
+              14, 12,
+              18, 14,
+            ],
+          },
+        });
+        map.addSource("roads-selected", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "roads-selected-casing",
+          type: "line",
+          source: "roads-selected",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 5,
+              10, 6.5,
+              14, 8,
+              18, 10,
+            ],
+            "line-opacity": 0.9,
+          },
+        });
+        map.addLayer({
+          id: "roads-selected-line",
+          type: "line",
+          source: "roads-selected",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": "#facc15",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 3.5,
+              10, 4.5,
+              14, 6,
+              18, 8,
+            ],
+            "line-opacity": 1,
+          },
+        });
         void supabase
           .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
           .then(({ data }) => {
@@ -1213,6 +1301,36 @@ export default function DatasetEditor() {
         });
         if (clickedOnFeature.length > 0) return;
 
+        // Road reference layer click → read-only metadata + yellow highlight.
+        if (datasetId !== "ruas_jalan") {
+          const roadFeats = map.queryRenderedFeatures(e.point, {
+            layers: ["roads-bg-line", "roads-bg-hit"],
+          });
+          if (roadFeats.length) {
+            const roadFeat = roadFeats[0] as unknown as Feature;
+            setRoadInfo(roadFeat);
+            const src = map.getSource("roads-selected") as
+              | maplibregl.GeoJSONSource
+              | undefined;
+            if (src) {
+              // Rebuild a clean feature: queryRenderedFeatures objects carry
+              // MapLibre internals that GeoJSONSource.setData silently rejects.
+              src.setData({
+                type: "FeatureCollection",
+                features: [
+                  {
+                    type: "Feature",
+                    geometry: roadFeat.geometry as Geometry,
+                    properties: (roadFeat.properties ?? {}) as Record<string, unknown>,
+                  },
+                ],
+              });
+            }
+            closePopup();
+            return;
+          }
+        }
+
         setSelectedIds([]);
         closePopup();
 
@@ -1223,7 +1341,20 @@ export default function DatasetEditor() {
           setSelectedFeature(null);
           setFormMode("create");
         }
+        setRoadInfo(null);
       });
+
+      if (datasetId !== "ruas_jalan") {
+        map.on("mouseenter", "roads-bg-hit", () => {
+          if (activeToolRef.current !== "select") return;
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "roads-bg-hit", () => {
+          if (activeToolRef.current === "pan") map.getCanvas().style.cursor = "grab";
+          else if (activeToolRef.current === "draw") map.getCanvas().style.cursor = "crosshair";
+          else map.getCanvas().style.cursor = "default";
+        });
+      }
 
       initTerraDraw();
 
@@ -1740,6 +1871,11 @@ export default function DatasetEditor() {
         if (dLng === 0 && dLat === 0) {
           const fc = featuresRef.current;
           if (fc) setDraftData(fc);
+          const feat = fc?.features.find((f) => String(f.id) === d.featureId);
+          // Pure click (no drag): the feature was removed from the source on
+          // mousedown and restored here, so MapLibre's layer click event won't
+          // reliably fire — open the edit panel directly.
+          if (feat) handleFeatureClick(feat as Feature);
           return;
         }
         const newGeom = translateGeometry(d.origGeom, dLng, dLat);
@@ -1816,6 +1952,7 @@ export default function DatasetEditor() {
     persistMovedFeature,
     resolveDraftId,
     applyDragPan,
+    handleFeatureClick,
   ]);
 
   useEffect(() => {
@@ -2271,25 +2408,32 @@ export default function DatasetEditor() {
                 <span className="ed-legend-label">Fitur (master)</span>
               </div>
               {datasetId !== "ruas_jalan" && (
-                <div className="ed-legend-item">
+                <button
+                  type="button"
+                  className="ed-legend-item ed-legend-item-road"
+                  onClick={handleToggleRuasColors}
+                  title="Klik untuk ganti warna ruas: pelangi → per UPTD → default"
+                >
                   <span
                     className="ed-legend-swatch-line"
                     style={{
-                      background: distinctRuas
-                        ? "linear-gradient(90deg,#ef4444,#eab308,#22c55e,#3b82f6)"
-                        : "#94a3b8",
+                      background:
+                        roadColorMode === "rainbow"
+                          ? "linear-gradient(90deg,#ef4444,#f97316,#eab308,#22c55e,#3b82f6,#8b5cf6)"
+                          : roadColorMode === "uptd"
+                          ? "linear-gradient(90deg,#3b82f6,#22c55e,#eab308,#ef4444)"
+                          : "#94a3b8",
                     }}
                   />
                   <span className="ed-legend-label">Ruas jalan (referensi)</span>
-                  <button
-                    type="button"
-                    className={`ed-legend-toggle${distinctRuas ? " on" : ""}`}
-                    onClick={handleToggleRuasColors}
-                    title="Warna berbeda untuk tiap ruas — memudahkan melihat batas antar ruas"
-                  >
-                    {distinctRuas ? "Warna unik" : "Seragam"}
-                  </button>
-                </div>
+                  <span className={`ed-legend-mode${roadColorMode !== "default" ? " on" : ""}`}>
+                    {roadColorMode === "rainbow"
+                      ? "Pelangi"
+                      : roadColorMode === "uptd"
+                      ? "Per UPTD"
+                      : "Default"}
+                  </span>
+                </button>
               )}
             </div>
           </div>
@@ -2390,6 +2534,56 @@ export default function DatasetEditor() {
               }}
               saving={saving}
             />
+          )}
+
+          {/* ---- Read-only road info panel (reference layer click) ---- */}
+          {roadInfo && !formOpen && (
+            <div className="ed-panel ed-panel-roadinfo">
+              <div className="ed-panel-header">
+                <h3>Meta Data Ruas Jalan</h3>
+                <button
+                  className="ed-btn-icon"
+                  onClick={() => {
+                    setRoadInfo(null);
+                    const src = mapRef.current?.getSource("roads-selected") as
+                      | maplibregl.GeoJSONSource
+                      | undefined;
+                    src?.setData({ type: "FeatureCollection", features: [] });
+                  }}
+                  title="Tutup panel"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <div className="ed-roadinfo-list">
+                {(
+                  [
+                    ["Kode Ruas", "kode_number"],
+                    ["Nama Ruas", "nama"],
+                    ["Status", "status"],
+                    ["Kabupaten", "KABUPATEN"],
+                    ["Panjang (km)", "panjang_km"],
+                    ["Unit Kerja", "unit_kerja_kode"],
+                    ["Lokasi Kode", "lokasi_kode"],
+                  ] as const
+                ).map(([label, key]) => {
+                  const v = (roadInfo.properties as GeoProps | null)?.[key];
+                  if (v == null || v === "") return null;
+                  return (
+                    <div key={key} className="ed-roadinfo-row">
+                      <span className="ed-roadinfo-label">{label}</span>
+                      <span className="ed-roadinfo-value">{String(v)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="ed-roadinfo-note">
+                Referensi ruas jalan (read-only). Gunakan toolbox untuk mengelola
+                fitur draft.
+              </p>
+            </div>
           )}
         </div>
       </div>

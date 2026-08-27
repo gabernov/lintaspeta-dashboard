@@ -1189,27 +1189,33 @@ body {
   color: var(--text-muted);
   white-space: nowrap;
 }
-.ed-legend-toggle {
-  margin-left: auto;
+.ed-legend-item-road {
   border: 1px solid var(--border-soft-4);
-  background: transparent;
-  color: var(--text-muted);
+  background: var(--glass-panel);
+  color: inherit;
+  font: inherit;
+  padding: 4px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+.ed-legend-item-road:hover {
+  border-color: var(--text-muted);
+}
+.ed-legend-mode {
+  margin-left: auto;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 2px 8px;
   border-radius: 999px;
-  cursor: pointer;
-  transition:
-    background 150ms ease,
-    color 150ms ease,
-    border-color 150ms ease;
+  color: var(--text-muted);
+  border: 1px solid var(--border-soft-4);
+  white-space: nowrap;
 }
-.ed-legend-toggle:hover {
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-.ed-legend-toggle.on {
+.ed-legend-mode.on {
   background: #2563eb;
   border-color: #2563eb;
   color: #ffffff;
@@ -1228,6 +1234,48 @@ body {
   color: var(--text);
   font-size: 11.5px;
   line-height: 1.4;
+}
+
+/* Read-only road metadata panel (reference layer click) */
+.ed-panel-roadinfo {
+  width: 300px;
+}
+.ed-roadinfo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.ed-roadinfo-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border-soft-3);
+}
+.ed-roadinfo-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.ed-roadinfo-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.ed-roadinfo-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+  word-break: break-word;
+}
+.ed-roadinfo-note {
+  margin: 0;
+  padding: 10px 16px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 /* ---- Topbar basemap dropdown ---- */
