@@ -33,3 +33,6 @@ supabase/.temp
 # Python
 __pycache__/
 *.pyc
+
+# Local database backups (may contain PII / auth hashes - never commit)
+backups/

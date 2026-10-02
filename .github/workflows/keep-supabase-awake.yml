@@ -1,18 +1,43 @@
 name: Keep Supabase Awake
 
+# Supabase pauses Free projects after 7 days without user DB activity; a GoTrue
+# /auth/v1/health probe does NOT count and let the project pause (2026-09). This
+# issues a real PostgREST SELECT and fails loudly, so a pause is never hidden.
+
 on:
   schedule:
-    # Every day at 06:00 UTC (13:00 WIB) - keeps free-tier project from pausing after 1 week idle
-    - cron: "0 6 * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase project
+      - name: Query Supabase (real DB activity)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            "${{ secrets.SUPABASE_URL }}/auth/v1/health" \
-            || echo "ping failed (non-fatal)"
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::error::Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret."
+            exit 1
+          fi
+
+          # A REST SELECT hits Postgres. service_role bypasses RLS so this works
+          # even when every table is locked down (it is).
+          body="$(mktemp)"
+          code="$(curl -sS -o "$body" -w "%{http_code}" \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            "${SUPABASE_URL}/rest/v1/profiles?select=id&limit=1")"
+          echo "HTTP ${code}"
+          cat "$body"; echo
+
+          if [ "${code}" != "200" ]; then
+            echo "::error::Supabase keep-alive FAILED (HTTP ${code}) — project may be paused or unreachable."
+            exit 1
+          fi
+
+          echo "Supabase is awake ✅"

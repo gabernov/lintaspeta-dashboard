@@ -1,0 +1,58 @@
+name: Backup Supabase
+
+# Daily logical backup of the lintas-dashboard Postgres database (public + auth
+# schemas). Protects against accidental project deletion, an unresumable
+# Free-plan pause, or data corruption. Dumps are retained as workflow artifacts
+# for 90 days and can be restored with:
+#   scripts/relaunch_supabase.sh --dump <artifact> --yes
+# See docs/RELAUNCH.md for the full disaster-recovery runbook.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL 17 client
+        # The project runs Postgres 17 and pg_dump refuses to dump a newer
+        # server than itself, so Ubuntu's older default client is not enough.
+        # Install the matching 17 client from the PGDG apt repository.
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          pg_dump --version
+
+      - name: Date stamp
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Run backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: bash scripts/backup_supabase.sh --out-dir backups
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ steps.date.outputs.date }}-${{ github.run_id }}
+          path: backups/
+          retention-days: 90
+          if-no-files-found: error
