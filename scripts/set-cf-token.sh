@@ -4,8 +4,11 @@
 # Usage:
 #   bash scripts/set-cf-token.sh [token-file]
 #
-#   token-file   optional path to a file containing ONLY the token.
-#                If omitted you are prompted for hidden input.
+#   token-file   optional path to a file. It may contain ONLY the token, or the
+#                whole block copied from the Cloudflare dashboard (Account ID,
+#                "Your API Token", R2 credentials, ...). The API token and
+#                Account ID are extracted automatically; R2 keys are ignored.
+#                If no file is given you are prompted for hidden input.
 #                The file is deleted after a successful update.
 #
 # The token is never printed. It is verified against the Cloudflare Pages API,
@@ -15,7 +18,7 @@ set -euo pipefail
 REPO="gabernov/lintaspeta-dashboard"
 WORKFLOW="publish-data.yml"
 DATASETS="none"
-ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-4b6f662c08a19365554f2c2d961e471c}"
+DEFAULT_ACCOUNT_ID="4b6f662c08a19365554f2c2d961e471c"
 
 find_gh() {
   if command -v gh >/dev/null 2>&1; then command -v gh; return 0; fi
@@ -29,6 +32,36 @@ find_gh() {
   return 1
 }
 
+extract_field() {
+  python - "$1" "$2" <<'PY'
+import re, sys
+
+blob = open(sys.argv[1], encoding="utf-8-sig", errors="replace").read()
+field = sys.argv[2]
+
+HEX = lambda n: re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{%d}(?![0-9a-fA-F])" % n)
+
+def after_label(label, pattern, text):
+    m = re.search(re.escape(label) + r"[^\n]*\n\s*(\S+)", text, re.IGNORECASE)
+    if m and pattern.fullmatch(m.group(1).strip()):
+        return m.group(1).strip()
+    return None
+
+if field == "token":
+    m = re.search(r"cfat_[A-Za-z0-9_\-]+", blob)
+    if m:
+        print(m.group(0)); sys.exit()
+    m = after_label("Your API Token", HEX(40), blob) or HEX(40).search(blob)
+    print(m.group(0) if hasattr(m, "group") else (m or ""))
+elif field == "account":
+    val = after_label("Account ID", HEX(32), blob)
+    if not val:
+        for cand in HEX(32).findall(blob):
+            val = cand; break
+    print(val or "")
+PY
+}
+
 GH_BIN="${GH_BIN:-$(find_gh || true)}"
 if [ -z "${GH_BIN:-}" ]; then
   echo "ERROR: GitHub CLI (gh) not found. Set GH_BIN=/path/to/gh" >&2
@@ -38,21 +71,28 @@ fi
 TOKEN_FILE="${1:-}"
 if [ -n "$TOKEN_FILE" ]; then
   [ -f "$TOKEN_FILE" ] || { echo "ERROR: token file not found: $TOKEN_FILE" >&2; exit 1; }
-  TOKEN="$(tr -d ' \t\r\n' < "$TOKEN_FILE")"
+  TOKEN="$(extract_field "$TOKEN_FILE" token)"
+  ACCOUNT_ID="$(extract_field "$TOKEN_FILE" account)"
 else
   printf 'Paste Cloudflare API token (hidden), then press Enter: '
-  read -rs TOKEN
+  read -rs RAW_INPUT
   printf '\n'
+  TMP_IN="$(mktemp)"
+  printf '%s' "$RAW_INPUT" > "$TMP_IN"
+  TOKEN="$(extract_field "$TMP_IN" token)"
+  rm -f -- "$TMP_IN"
+  RAW_INPUT=""
+  ACCOUNT_ID=""
 fi
 
+ACCOUNT_ID="${ACCOUNT_ID:-$DEFAULT_ACCOUNT_ID}"
+
 if [ -z "${TOKEN:-}" ]; then
-  echo "ERROR: no token provided." >&2
+  echo "ERROR: could not find an API token (cfat_… or 40 hex chars) in the input." >&2
   exit 1
 fi
-case "$TOKEN" in
-  cfat_*|????????????????????????????????????????) ;;
-  *) echo "WARNING: value does not look like a Cloudflare API token (cfat_… or 40 hex chars)." >&2 ;;
-esac
+
+echo "Found token: ${TOKEN:0:9}… (hidden)   Account ID: $ACCOUNT_ID"
 
 echo "Verifying token against the Cloudflare Pages API…"
 RESP="$(curl -s -m 25 "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects?per_page=1" -H "Authorization: Bearer $TOKEN")"
