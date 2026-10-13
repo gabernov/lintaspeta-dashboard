@@ -6,7 +6,8 @@ import { TerraDraw, TerraDrawPointMode, TerraDrawLineStringMode } from "terra-dr
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
-import { ED_BASEMAP_EVENT, getBasemap } from "../lib/basemaps";
+import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
+import { ED_THEME_EVENT, getCurrentTheme, type ThemeMode } from "../lib/theme";
 import { useAuth } from "../auth/AuthContext";
 import AttributeForm from "../components/editor/AttributeForm";
 import type { EditWindow } from "../lib/types";
@@ -372,8 +373,10 @@ export default function DatasetEditor() {
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
 
-  /* ---- basemap: default bright, switched from the topbar dropdown ---- */
-  const basemapIdRef = useRef(getBasemap(localStorage.getItem("ed_basemap")).id);
+  /* ---- basemap: stored pick, else the theme's default ---- */
+  const basemapIdRef = useRef(
+    getBasemap(localStorage.getItem("ed_basemap") ?? basemapForTheme(getCurrentTheme()).id).id
+  );
 
   /* ---- undo / redo ---- */
   type UndoOp =
@@ -993,27 +996,7 @@ export default function DatasetEditor() {
 
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
-      style: {
-        version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-        sources: {
-          basemap: {
-            type: "raster",
-            tiles: [getBasemap(basemapIdRef.current).url],
-            tileSize: 256,
-            attribution: getBasemap(basemapIdRef.current).attribution,
-          },
-        },
-        layers: [
-          {
-            id: "basemap",
-            type: "raster",
-            source: "basemap",
-            minzoom: 0,
-            maxzoom: 20,
-          },
-        ],
-      },
+      style: basemapStyleSpec(getBasemap(basemapIdRef.current)),
       center: [107.6, -6.9],
       zoom: 9,
     });
@@ -1373,16 +1356,14 @@ export default function DatasetEditor() {
       }
     };
 
-    if (map.isStyleLoaded()) {
-      onLoad();
-    } else {
-      map.once("load", onLoad);
-      map.once("styledata", onLoad);
-      // Fallback: if the style never fully "loads" (e.g. slow glyph/tile server),
-      // still init once the base style is present.
-      const t = setTimeout(onLoad, 8000);
-      map.once("remove", () => clearTimeout(t));
-    }
+    if (map.isStyleLoaded()) onLoad();
+    // Persistent: setStyle (basemap switch) wipes sources/layers, so overlays
+    // and terra-draw must be rebuilt every time a style finishes loading.
+    map.on("style.load", onLoad);
+    // Fallback: if the style never fully "loads" (e.g. slow glyph/tile server),
+    // still init once the base style is present.
+    const t = setTimeout(onLoad, 8000);
+    map.once("remove", () => clearTimeout(t));
 
     map.on("moveend", () => {
       if (!datasetId) return;
@@ -1416,12 +1397,14 @@ export default function DatasetEditor() {
       td.on("finish", (_id, context) => {
         if (context.action === "draw") {
           const snap = td.getSnapshot();
-          const drawn = snap.find(
-            (f) =>
-              f.properties?.mode ===
-                (drawTargetRef.current === "point" ? "point" : "linestring") &&
-              !f.properties?.currentlyDrawing
-          );
+          const drawn =
+            snap.find((f) => f.id === _id) ??
+            snap.find(
+              (f) =>
+                f.properties?.mode ===
+                  (drawTargetRef.current === "point" ? "point" : "linestring") &&
+                !f.properties?.currentlyDrawing
+            );
           if (drawn) {
             const geom = drawn.geometry as Point | LineString;
 
@@ -1488,19 +1471,33 @@ export default function DatasetEditor() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ---- apply topbar basemap picks to the map tiles ---- */
+  /* ---- basemap + theme: switch the map style (overlays rebuild on style.load) ---- */
   useEffect(() => {
-    const onPick = (e: Event) => {
-      const id = (e as CustomEvent<string>).detail;
-      const bm = getBasemap(id);
+    const applyBasemap = (bm: ReturnType<typeof getBasemap>) => {
+      const map = mapRef.current;
+      if (!map) return;
       basemapIdRef.current = bm.id;
-      const src = mapRef.current?.getSource("basemap");
-      if (src && "setTiles" in src) {
-        (src as maplibregl.RasterTileSource).setTiles([bm.url]);
-      }
+      localStorage.setItem("ed_basemap", bm.id);
+      map.setStyle(basemapStyleSpec(bm));
+    };
+    const onPick = (e: Event) => {
+      applyBasemap(getBasemap((e as CustomEvent<string>).detail));
+    };
+    const onTheme = (e: Event) => {
+      const theme = (e as CustomEvent<ThemeMode>).detail;
+      const current = getBasemap(basemapIdRef.current);
+      // Leave manual satellite/OSM/topo picks alone; only theme-paired styles follow.
+      if (!current.theme) return;
+      const next = basemapForTheme(theme);
+      if (next.id === current.id) return;
+      window.dispatchEvent(new CustomEvent(ED_BASEMAP_EVENT, { detail: next.id }));
     };
     window.addEventListener(ED_BASEMAP_EVENT, onPick);
-    return () => window.removeEventListener(ED_BASEMAP_EVENT, onPick);
+    window.addEventListener(ED_THEME_EVENT, onTheme);
+    return () => {
+      window.removeEventListener(ED_BASEMAP_EVENT, onPick);
+      window.removeEventListener(ED_THEME_EVENT, onTheme);
+    };
   }, []);
 
   /* ---- keep activeTool ref in sync for event handlers ---- */
@@ -1564,7 +1561,9 @@ export default function DatasetEditor() {
   /* ---- sync terra-draw mode with activeTool ---- */
   useEffect(() => {
     if (tdRef.current && meta) {
-      if (activeTool === "draw" && canDraw) {
+      // Re-arm drawing whenever the create form is closed; while it is open the
+      // mode stays static so a stray map click can't overwrite pendingGeometry.
+      if (activeTool === "draw" && canDraw && !formOpen) {
         tdRef.current.setMode(
           drawTarget === "point" ? "point" : "linestring"
         );
@@ -1572,7 +1571,7 @@ export default function DatasetEditor() {
         tdRef.current.setMode("static");
       }
     }
-  }, [activeTool, canDraw, meta, drawTarget]);
+  }, [activeTool, canDraw, meta, drawTarget, formOpen]);
 
   /* ---- initial data fetch ---- */
   useEffect(() => {
@@ -2209,7 +2208,6 @@ export default function DatasetEditor() {
       show: isSuperAdmin,
       active: false,
       disabled: publishBusy,
-      className: "ed-toolbox-btn-publish",
       title: "Publish ke Peta Publik",
       icon: (
         <svg
@@ -2306,7 +2304,13 @@ export default function DatasetEditor() {
     },
   ];
 
-  const visibleToolboxBtns = toolboxBtns.filter((b) => b.show);
+  const ACTION_LABELS: Record<string, string> = {
+    autopublish: "Auto-publish 2 hari",
+    publish: "Publish",
+  };
+  const isActionBtn = (key: string) => key === "autopublish" || key === "publish";
+  const actionBtns = toolboxBtns.filter((b) => b.show && isActionBtn(b.key));
+  const visibleToolboxBtns = toolboxBtns.filter((b) => b.show && !isActionBtn(b.key));
   const visibleToolboxBtnsRef = useRef(visibleToolboxBtns);
   useEffect(() => {
     visibleToolboxBtnsRef.current = visibleToolboxBtns;
@@ -2377,32 +2381,53 @@ export default function DatasetEditor() {
           </div>
         </div>
 
-          {/* ---- Floating Toolbox + Legend ---- */}
-          <div className="ed-dock">
-            {(isSuperAdmin || isEditor) && (
-              <div className="ed-toolbox">
-                {visibleToolboxBtns.map((btn, i) => (
-                  <Fragment key={btn.key}>
-                    {i > 0 && visibleToolboxBtns[i - 1].group !== btn.group && (
-                      <div className="ed-toolbox-divider" />
-                    )}
-                    <button
-                      className={`ed-toolbox-btn${btn.active ? " ed-toolbox-btn-active" : ""}${btn.className ? ` ${btn.className}` : ""}`}
-                      onClick={btn.onClick}
-                      disabled={btn.disabled}
-                      title={`${i + 1}. ${btn.title}`}
-                    >
-                      <span className="ed-toolbox-key">{i + 1}</span>
-                      {btn.icon}
-                    </button>
-                  </Fragment>
-                ))}
-              </div>
-            )}
+          {/* ---- Toolbar (top-center) / Actions (top-right) / Legend (bottom-left) ---- */}
+          {(isSuperAdmin || isEditor) && (
+            <div className="ed-toolbar" role="toolbar" aria-label="Alat editor">
+              {visibleToolboxBtns.map((btn, i) => (
+                <Fragment key={btn.key}>
+                  {i > 0 && visibleToolboxBtns[i - 1].group !== btn.group && (
+                    <div className="ed-toolbar-divider" />
+                  )}
+                  <button
+                    type="button"
+                    className={`ed-tool${btn.active ? " on" : ""}`}
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
+                    title={`${i + 1}. ${btn.title}`}
+                  >
+                    {btn.icon}
+                    <span className="ed-tool-key">{i + 1}</span>
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+          )}
 
-            {/* Legend rides inside the mobile sheet; on desktop CSS keeps
-                both children at their own absolute positions. */}
-            <div className="ed-legend">
+          {actionBtns.length > 0 && (
+            <div className="ed-actions">
+              {actionBtns.map((btn) => (
+                <button
+                  key={btn.key}
+                  type="button"
+                  className={`ed-action${btn.active ? " on" : ""}${btn.key === "publish" ? " ed-action-primary" : ""}`}
+                  onClick={btn.onClick}
+                  disabled={btn.disabled}
+                  title={btn.title}
+                >
+                  {btn.icon}
+                  <span className="ed-action-label">{ACTION_LABELS[btn.key] ?? btn.title}</span>
+                  {btn.key === "autopublish" && (
+                    <span className={`ed-action-state${btn.active ? " on" : ""}`}>
+                      {btn.active ? "ON" : "OFF"}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="ed-legend">
               <div className="ed-legend-item">
                 {isPoint ? (
                   <span
@@ -2446,7 +2471,6 @@ export default function DatasetEditor() {
                 </button>
               )}
             </div>
-          </div>
 
           {/* ---- Marquee overlay (select tool) ---- */}
           {activeTool === "select" && marquee && (
