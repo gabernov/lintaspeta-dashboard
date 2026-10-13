@@ -23,18 +23,14 @@ import type {
 /* Basemap catalog lives in lib/basemaps.ts — picked from the topbar
    dropdown and applied here via the ed-basemap window event. */
 
-/* Deterministic per-ruas color: golden-angle hue walk keeps adjacent
-   ruas visually distinct even with many features on screen. */
-function ruasColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = (Math.imul(h, 31) + seed.charCodeAt(i)) | 0;
-  }
-  const hue = Math.abs(h) % 360;
-  // High saturation + high lightness so adjacent ruas pop clearly on both
-  // light and dark basemaps (was 72%/46% — too muddy).
-  return `hsl(${hue} 95% 62%)`;
-}
+const ROAD_UPTD = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
+const UPTD_COLORS: Record<string, string> = {
+  "UPTD-I": "#E11D48",
+  "UPTD-II": "#2563EB",
+  "UPTD-III": "#059669",
+  "UPTD-IV": "#7C3AED",
+};
+const ROAD_UPTD_FALLBACK = "#94A3B8";
 
 /* Squared distance from point to a lng/lat vertex array — good enough
    for nearest-ruas ranking at province scale. */
@@ -362,14 +358,8 @@ export default function DatasetEditor() {
     new Map()
   );
   const [roadInfo, setRoadInfo] = useState<Feature | null>(null);
-  // Road reference coloring mode: "rainbow" = per-ruas distinct hues,
-  // "uptd" = color per unit_kerja_kode, "default" = neutral grey.
-  type RoadColorMode = "default" | "rainbow" | "uptd";
-  const [roadColorMode, setRoadColorMode] = useState<RoadColorMode>(() => {
-    const saved = localStorage.getItem(`ruas_colors_${datasetId}`);
-    return saved === "rainbow" || saved === "uptd" ? saved : "default";
-  });
-  const roadColorModeRef = useRef(roadColorMode);
+  const [activeRoadUPTD, setActiveRoadUPTD] = useState<string[]>(() => [...ROAD_UPTD]);
+  const roadUPTDRef = useRef<string[]>([...ROAD_UPTD]);
   const [layersOpen, setLayersOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [featuresVisible, setFeaturesVisible] = useState(true);
@@ -619,71 +609,52 @@ export default function DatasetEditor() {
     showToast(next ? "Jendela edit dibuka" : "Jendela edit ditutup", true);
   }, [editWindow, datasetId, profile?.id, showToast]);
 
-  /* Recolor the ruas reference layer: rainbow = per-ruas distinct hues,
-   uptd = color per unit_kerja_kode, default = neutral grey. */
-  const applyRuasColors = useCallback(() => {
+  /* Road reference layer: fixed UPTD palette (same as the public map) plus a
+   per-UPTD filter so each unit can be toggled on/off. */
+  const applyRoadStyle = useCallback(() => {
     const map = mapRef.current;
-    const fc = roadsBgRef.current;
     if (!map || !map.getLayer("roads-bg-line")) return;
-    const mode = roadColorModeRef.current;
-    if (mode !== "default" && fc) {
-      if (mode === "rainbow") {
-        fc.features.forEach((f, idx) => {
-          const p = (f.properties ?? {}) as Record<string, unknown>;
-          // Index in the seed guarantees distinct hues even when the
-          // published payload carries no kode/nama properties.
-          f.properties = {
-            ...p,
-            _ruas_color: ruasColor(
-              `${String(p.kode_number ?? "")}|${String(p.nama ?? "")}|${idx}`
-            ),
-          };
-        });
-      } else {
-        const uptdPalette = [
-          "#ef4444", "#f97316", "#eab308", "#22c55e",
-          "#14b8a6", "#3b82f6", "#8b5cf6", "#ec4899",
-        ];
-        const uptdMap = new Map<string, string>();
-        fc.features.forEach((f, idx) => {
-          const p = (f.properties ?? {}) as Record<string, unknown>;
-          const uptd = String(p.unit_kerja_kode ?? "");
-          const key = uptd || `_none_${idx}`;
-          if (!uptdMap.has(key)) {
-            uptdMap.set(key, uptdPalette[uptdMap.size % uptdPalette.length]);
-          }
-          f.properties = { ...p, _ruas_color: uptdMap.get(key) };
-        });
-      }
-      const src = map.getSource("roads-bg");
-      if (src && "setData" in src) {
-        (src as maplibregl.GeoJSONSource).setData(fc);
-      }
-      map.setPaintProperty("roads-bg-line", "line-color", [
-        "get",
-        "_ruas_color",
-      ]);
-    } else {
-      map.setPaintProperty("roads-bg-line", "line-color", "#94a3b8");
-    }
+    map.setPaintProperty("roads-bg-line", "line-color", [
+      "match",
+      ["get", "unit_kerja_kode"],
+      "UPTD-I", UPTD_COLORS["UPTD-I"],
+      "UPTD-II", UPTD_COLORS["UPTD-II"],
+      "UPTD-III", UPTD_COLORS["UPTD-III"],
+      "UPTD-IV", UPTD_COLORS["UPTD-IV"],
+      ROAD_UPTD_FALLBACK,
+    ]);
+    const sel = roadUPTDRef.current;
+    const filter: maplibregl.FilterSpecification | null =
+      sel.length >= ROAD_UPTD.length
+        ? null
+        : (["in", ["get", "unit_kerja_kode"], ["literal", sel]] as maplibregl.FilterSpecification);
+    ROAD_LAYERS.forEach((id) => {
+      if (map.getLayer(id)) map.setFilter(id, filter);
+    });
   }, []);
 
   useEffect(() => {
-    applyRuasColorsRef.current = applyRuasColors;
-  }, [applyRuasColors]);
+    applyRuasColorsRef.current = applyRoadStyle;
+  }, [applyRoadStyle]);
 
-  const setRoadColor = useCallback(
-    (mode: RoadColorMode) => {
-      localStorage.setItem(`ruas_colors_${datasetId}`, mode);
-      setRoadColorMode(mode);
+  const toggleRoadUPTD = useCallback(
+    (code: string) => {
+      setActiveRoadUPTD((prev) => {
+        const next = prev.includes(code)
+          ? prev.filter((c) => c !== code)
+          : [...prev, code];
+        roadUPTDRef.current = next;
+        return next;
+      });
     },
-    [datasetId]
+    []
   );
 
   useEffect(() => {
-    roadColorModeRef.current = roadColorMode;
-    applyRuasColors();
-  }, [roadColorMode, applyRuasColors]);
+    roadUPTDRef.current = activeRoadUPTD;
+    applyRoadStyle();
+    applyLayers();
+  }, [activeRoadUPTD, applyRoadStyle, applyLayers]);
 
   const handleSave = useCallback(
     async (values: GeoProps) => {
@@ -1091,10 +1062,10 @@ export default function DatasetEditor() {
               "interpolate",
               ["linear"],
               ["zoom"],
-              6, 2,
-              10, 3,
-              14, 4.5,
-              18, 6,
+              6, 3,
+              10, 4.2,
+              14, 6,
+              18, 8,
             ],
             "line-opacity": 0.85,
           },
@@ -1105,17 +1076,17 @@ export default function DatasetEditor() {
           source: "roads-bg",
           layout: { "line-join": "round", "line-cap": "round" },
           paint: {
-            "line-color": "#94a3b8",
+            "line-color": ROAD_UPTD_FALLBACK,
             "line-width": [
               "interpolate",
               ["linear"],
               ["zoom"],
-              6, 0.9,
-              10, 1.4,
-              14, 2.2,
-              18, 3.2,
+              6, 1.6,
+              10, 2.4,
+              14, 3.6,
+              18, 5.2,
             ],
-            "line-opacity": 0.7,
+            "line-opacity": 0.9,
           },
         });
         // Invisible wide hit layer: makes thin reference roads easy to click.
@@ -2532,24 +2503,30 @@ export default function DatasetEditor() {
                       onClick={() => setRoadsVisible((v) => !v)}
                       aria-pressed={roadsVisible}
                     >
-                      <span className="ed-layer-swatch is-line" style={{ background: "#94a3b8" }} />
+                      <span className="ed-layer-swatch is-line" style={{ background: "#cbd5e1" }} />
                       <span className="ed-layer-label">Ruas jalan (referensi)</span>
                       <span className="ed-layer-state">{roadsVisible ? "On" : "Off"}</span>
                     </button>
-                    <div className="ed-layer-field">
-                      <span className="ed-layer-label">Warna ruas</span>
-                      <div className="ed-seg">
-                        {(["default", "rainbow", "uptd"] as RoadColorMode[]).map((mode) => (
+                    <div className="ed-layer-sub">
+                      {ROAD_UPTD.map((code) => {
+                        const on = activeRoadUPTD.includes(code);
+                        return (
                           <button
-                            key={mode}
+                            key={code}
                             type="button"
-                            className={`ed-seg-btn${roadColorMode === mode ? " on" : ""}`}
-                            onClick={() => setRoadColor(mode)}
+                            className={`ed-layer-row ed-layer-row-sub${on ? " on" : ""}`}
+                            onClick={() => toggleRoadUPTD(code)}
+                            aria-pressed={on}
                           >
-                            {mode === "default" ? "Default" : mode === "rainbow" ? "Pelangi" : "Per UPTD"}
+                            <span
+                              className="ed-layer-swatch is-line"
+                              style={{ background: UPTD_COLORS[code] }}
+                            />
+                            <span className="ed-layer-label">{code.replace("UPTD-", "UPTD ")}</span>
+                            <span className="ed-layer-state">{on ? "On" : "Off"}</span>
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}
