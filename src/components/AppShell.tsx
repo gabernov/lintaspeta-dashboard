@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DATASETS } from "../lib/datasets";
-import { applyTheme, getInitialTheme, isSystemMode, type ThemeMode } from "../lib/theme";
+import { applySystemTheme, applyTheme, getInitialTheme, isSystemMode, type ThemeMode } from "../lib/theme";
 import BasemapPicker from "./BasemapPicker";
 
 function initials(name: string | null | undefined) {
@@ -51,7 +51,7 @@ export default function AppShell() {
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = (e: MediaQueryListEvent) => {
       const t: ThemeMode = e.matches ? "light" : "dark";
-      document.documentElement.dataset.theme = t;
+      applySystemTheme(t);
       setTheme(t);
     };
     mq.addEventListener("change", onChange);

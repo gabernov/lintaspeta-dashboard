@@ -28,6 +28,14 @@ export default function BasemapPicker() {
     };
   }, [open]);
 
+  useEffect(() => {
+    const onExternal = (e: Event) => {
+      setCurrent(getBasemap((e as CustomEvent<string>).detail));
+    };
+    window.addEventListener(ED_BASEMAP_EVENT, onExternal);
+    return () => window.removeEventListener(ED_BASEMAP_EVENT, onExternal);
+  }, []);
+
   const pick = (id: string) => {
     const bm = getBasemap(id);
     localStorage.setItem("ed_basemap", bm.id);
@@ -66,6 +74,7 @@ export default function BasemapPicker() {
               onClick={() => pick(b.id)}
             >
               <span className="bm-check">{b.id === current.id ? "✓" : ""}</span>
+              <span className="bm-swatch" style={{ background: b.swatch }} aria-hidden="true" />
               <span>{b.label}</span>
             </button>
           ))}
