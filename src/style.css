@@ -680,15 +680,16 @@ body {
   padding: 1px 5px 2px;
 }
 
-/* Side Panel — floating card on the right, under the top-right actions */
+/* Side Panel — floating card on the left, under the topbar */
 .ed-panel {
   position: absolute;
-  top: 64px;
-  right: 12px;
+  top: 56px;
+  left: 12px;
+  right: auto;
   z-index: 6;
   width: 340px;
-  max-width: calc(100% - 76px);
-  max-height: calc(100% - 76px);
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 68px);
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -906,43 +907,58 @@ body {
   position: relative;
 }
 
-/* ---- Top-left panel: title, online, edit window (glassmorphism) ---- */
-.ed-panel-tl {
+/* ---- Status + publish card (top-right) ---- */
+.ed-status {
   position: absolute;
-  top: 56px; /* below the floating sidebar-toggle (top:10px) */
-  left: 12px;
-  z-index: 6;
+  top: 12px;
+  right: 12px;
+  z-index: 7;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 320px;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 300px;
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--border-soft-2);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.45),
     inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   color: var(--text);
 }
-.ed-panel-tl-title {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--text);
-}
-.ed-panel-tl-sub {
+.ed-status-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  flex-wrap: wrap;
 }
-.ed-panel-tl-sub .ed-live-dot {
-  flex-shrink: 0;
+.ed-status-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-status-online {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ed-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ed-status-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft-3);
 }
 .ed-window-pill {
   font-size: 11px;
@@ -1068,26 +1084,7 @@ body {
   background: rgba(148, 163, 184, 0.18);
 }
 
-/* ---- Action buttons (publish / auto-publish), top-right ---- */
-.ed-actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 6;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  background: var(--glass-soft);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid var(--border-soft-3);
-  border-radius: 12px;
-  padding: 6px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-}
+/* ---- Action buttons (publish / auto-publish) inside the status card ---- */
 .ed-action {
   display: flex;
   align-items: center;
@@ -1189,21 +1186,23 @@ body {
   bottom: 40px;
   left: 12px;
   z-index: 5;
-  background: var(--glass-legend);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--border-soft-4);
-  border-radius: 10px;
-  padding: 8px 12px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
 }
 .ed-legend-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--glass-legend);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft-4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 .ed-legend-swatch {
   width: 12px;
@@ -1226,13 +1225,9 @@ body {
   white-space: nowrap;
 }
 .ed-legend-item-road {
-  border: 1px solid var(--border-soft-4);
-  background: var(--glass-panel);
-  color: inherit;
-  font: inherit;
-  padding: 4px 10px;
-  border-radius: 10px;
   cursor: pointer;
+  font: inherit;
+  color: inherit;
   transition:
     background 150ms ease,
     border-color 150ms ease;
@@ -2335,7 +2330,8 @@ body {
     padding-inline: 10px;
   }
   .ed-panel {
-    top: 112px;
+    top: 118px;
+    z-index: 8;
     right: 8px;
     left: 8px;
     width: auto;
@@ -2353,17 +2349,34 @@ body {
 }
 
 /* Editor — narrow screens AND short landscape (e.g. iPhone 12 Pro
-   844x390). Toolbar sits top-center, actions top-right icon-only; the info
-   panel and legend compact so the map stays clear. */
+   844x390). Toolbar top-center, status card below it; labels compact so the
+   map stays clear. */
 @media (max-width: 820px), (max-height: 560px) {
   .ed-toolbar {
     top: 62px;
-    max-width: calc(100vw - 104px);
+    max-width: calc(100vw - 16px);
   }
-  .ed-actions {
-    top: 62px;
+  .ed-status {
+    top: 118px;
     right: 8px;
-    padding: 4px;
+    min-width: 0;
+    max-width: 200px;
+    gap: 6px;
+    padding: 8px;
+  }
+  .ed-status-title {
+    font-size: 12px;
+  }
+  .ed-status-online {
+    display: none;
+  }
+  .ed-status-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .ed-status-actions {
+    flex-direction: row;
+    padding-top: 6px;
   }
   .ed-action {
     padding: 7px 8px;
@@ -2371,38 +2384,18 @@ body {
   .ed-action-label {
     display: none;
   }
-  .ed-panel-tl {
-    top: 112px;
-    left: 8px;
-    max-width: calc(100vw - 76px);
-    font-size: 11px;
-    gap: 4px;
-    padding: 6px 8px;
-  }
-  .ed-panel-tl-sub {
-    flex-wrap: wrap;
-    gap: 4px;
-    font-size: 10px;
-  }
-  .ed-panel-tl-title {
-    font-size: 13px;
-  }
   .ed-legend {
     bottom: 44px;
     left: 8px;
     font-size: 10.5px;
     gap: 4px;
-    padding: 6px 8px;
-    max-width: 60vw;
+    max-width: calc(100vw - 16px);
   }
 }
 
 @media (max-width: 480px) {
   .ed-legend {
     display: none;
-  }
-  .ed-panel-tl {
-    max-width: calc(100vw - 60px);
   }
 }
 
