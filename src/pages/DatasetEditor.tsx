@@ -1039,6 +1039,11 @@ export default function DatasetEditor() {
       "bottom-left"
     );
 
+    // The sidebar collapses with a width transition; MapLibre only tracks
+    // window resize, so observe the container and resize the canvas with it.
+    const resizeObserver = new ResizeObserver(() => map.resize());
+    resizeObserver.observe(mapContainerRef.current);
+
     const onLoad = () => {
       if (map.getSource("draft")) return;
 
@@ -1493,6 +1498,7 @@ export default function DatasetEditor() {
       closePopup();
       tdRef.current?.stop();
       tdRef.current = null;
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };

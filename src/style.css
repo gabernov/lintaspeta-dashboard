@@ -659,11 +659,16 @@ body {
   position: relative;
   height: 100%;
   width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
 }
 .ed-map-wrap {
   position: relative;
   width: 100%;
   height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--border-soft-2);
 }
 .ed-map-wrap .maplibregl-map {
   height: 100%;
