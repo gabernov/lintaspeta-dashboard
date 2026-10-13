@@ -1040,8 +1040,13 @@ export default function DatasetEditor() {
     );
 
     // The sidebar collapses with a width transition; MapLibre only tracks
-    // window resize, so observe the container and resize the canvas with it.
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    // window resize, so observe the container. Debounce so the canvas resizes
+    // once the transition settles instead of every frame (which flickers).
+    let resizeTimer = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => map.resize(), 150);
+    });
     resizeObserver.observe(mapContainerRef.current);
 
     const onLoad = () => {
@@ -1498,6 +1503,7 @@ export default function DatasetEditor() {
       closePopup();
       tdRef.current?.stop();
       tdRef.current = null;
+      window.clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
