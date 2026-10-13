@@ -907,59 +907,100 @@ body {
   position: relative;
 }
 
-/* ---- Status + publish card (top-right) ---- */
-.ed-status {
+/* ---- Status chip + Publish (top-right) ---- */
+.ed-topright {
   position: absolute;
   top: 12px;
   right: 12px;
   z-index: 7;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  min-width: 220px;
-  max-width: 300px;
+}
+.ed-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--glass-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-soft-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.15s, color 0.15s;
+}
+.ed-chip:hover { color: var(--text); }
+.ed-chip.on { color: var(--text); border-color: var(--accent-tint-strong); }
+.ed-chip-dot { opacity: 0.5; }
+.ed-chip-open { color: var(--ok-soft); font-weight: 600; }
+.ed-chip-closed { color: var(--text-muted); }
+.ed-publish {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-tint-strong);
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+  transition: background 0.15s, opacity 0.15s;
+}
+.ed-publish:hover { background: var(--accent-strong); }
+.ed-publish:disabled { opacity: 0.55; cursor: not-allowed; }
+.ed-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 230px;
+  padding: 12px;
+  border-radius: 12px;
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid var(--border-soft-2);
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  color: var(--text);
+  border: 1px solid var(--border-soft-3);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
 }
-.ed-status-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ed-status-title {
-  font-size: 14px;
+.ed-popover-right { right: 0; }
+.ed-popover-title {
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1.2;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ed-status-online {
-  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
-  white-space: nowrap;
 }
-.ed-status-row {
+.ed-popover-row { display: flex; align-items: center; gap: 8px; }
+.ed-popover-toggle {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft-3);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.ed-status-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-soft-3);
-}
+.ed-popover-toggle:hover { background: rgba(148, 163, 184, 0.12); color: var(--text); }
+.ed-popover-toggle.on { color: var(--accent-soft); border-color: var(--accent-tint-strong); }
 .ed-window-pill {
   font-size: 11px;
   font-weight: 700;
@@ -1084,33 +1125,8 @@ body {
   background: rgba(148, 163, 184, 0.18);
 }
 
-/* ---- Action buttons (publish / auto-publish) inside the status card ---- */
-.ed-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.ed-action:hover { background: rgba(148, 163, 184, 0.12); color: var(--text); }
-.ed-action:disabled { opacity: 0.5; cursor: not-allowed; }
-.ed-action.on { color: var(--accent-soft); background: var(--accent-tint); }
-.ed-action-primary {
-  border-color: var(--accent-tint-strong);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
-}
-.ed-action-primary:hover { background: var(--accent-tint-strong); color: var(--text); }
-.ed-action-label { flex: 1; }
+/* ---- Action label + state pill (used inside the status popover) ---- */
+.ed-action-label { flex: 1; text-align: left; }
 .ed-action-state {
   font-size: 10px;
   font-weight: 700;
@@ -1181,75 +1197,125 @@ body {
 }
 
 /* ---- Legend (bottom-left, above scale) ---- */
-.ed-legend {
+.ed-layers {
   position: absolute;
-  bottom: 40px;
+  bottom: 12px;
   left: 12px;
-  z-index: 5;
+  z-index: 9;
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
-.ed-legend-item {
+.ed-layers-btn {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
+  padding: 7px 12px;
   border-radius: 999px;
-  background: var(--glass-legend);
+  background: var(--glass-panel);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--border-soft-4);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-}
-.ed-legend-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid var(--bg-soft);
-  flex-shrink: 0;
-}
-.ed-legend-swatch-field {
-  border-color: rgba(146, 64, 14, 0.5);
-}
-.ed-legend-swatch-line {
-  width: 18px;
-  height: 3px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-.ed-legend-label {
+  border: 1px solid var(--border-soft-2);
   color: var(--text-muted);
-  white-space: nowrap;
-}
-.ed-legend-item-road {
-  cursor: pointer;
   font: inherit;
-  color: inherit;
-  transition:
-    background 150ms ease,
-    border-color 150ms ease;
-}
-.ed-legend-item-road:hover {
-  border-color: var(--text-muted);
-}
-.ed-legend-mode {
-  margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: var(--text-muted);
-  border: 1px solid var(--border-soft-4);
-  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  transition: color 0.15s, border-color 0.15s;
 }
-.ed-legend-mode.on {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+.ed-layers-btn:hover { color: var(--text); }
+.ed-layers-btn.on { color: var(--text); border-color: var(--accent-tint-strong); }
+.ed-layers-card {
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--glass-panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-soft-3);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+.ed-layers-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.ed-layers-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: -4px;
+}
+.ed-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft-3);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.ed-layer-row:hover { background: rgba(148, 163, 184, 0.12); color: var(--text); }
+.ed-layer-row.on { color: var(--text); }
+.ed-layer-row:not(.on) { opacity: 0.55; }
+.ed-layer-swatch {
+  width: 14px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+.ed-layer-swatch.is-dot { width: 12px; height: 12px; border-radius: 50%; }
+.ed-layer-swatch.is-line { height: 3px; border-radius: 2px; }
+.ed-layer-label { flex: 1; text-align: left; white-space: nowrap; }
+.ed-layer-state {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.ed-layer-row.on .ed-layer-state { color: var(--ok-soft); }
+.ed-layer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft-3);
+}
+.ed-seg {
+  display: flex;
+  gap: 4px;
+}
+.ed-seg-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border-radius: 7px;
+  border: 1px solid var(--border-soft-3);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ed-seg-btn:hover { color: var(--text); }
+.ed-seg-btn.on {
+  background: var(--accent-tint);
+  border-color: var(--accent-tint-strong);
+  color: var(--accent-soft);
 }
 
 /* Autofill hint (nearest-ruas prefill) */
@@ -2349,53 +2415,37 @@ body {
 }
 
 /* Editor — narrow screens AND short landscape (e.g. iPhone 12 Pro
-   844x390). Toolbar top-center, status card below it; labels compact so the
-   map stays clear. */
+   844x390). Toolbar top-center, compact status chip below it, Layers
+   button bottom-left. */
 @media (max-width: 820px), (max-height: 560px) {
   .ed-toolbar {
     top: 62px;
     max-width: calc(100vw - 16px);
   }
-  .ed-status {
+  .ed-topright {
     top: 118px;
     right: 8px;
-    min-width: 0;
-    max-width: 200px;
     gap: 6px;
-    padding: 8px;
   }
-  .ed-status-title {
-    font-size: 12px;
+  .ed-chip {
+    padding: 6px 10px;
+    font-size: 11px;
   }
-  .ed-status-online {
+  .ed-publish span {
     display: none;
   }
-  .ed-status-row {
-    flex-wrap: wrap;
-    gap: 4px;
+  .ed-publish {
+    padding: 8px 10px;
   }
-  .ed-status-actions {
-    flex-direction: row;
-    padding-top: 6px;
-  }
-  .ed-action {
-    padding: 7px 8px;
-  }
-  .ed-action-label {
-    display: none;
-  }
-  .ed-legend {
-    bottom: 44px;
+  .ed-layers {
+    bottom: 8px;
     left: 8px;
-    font-size: 10.5px;
-    gap: 4px;
-    max-width: calc(100vw - 16px);
   }
 }
 
 @media (max-width: 480px) {
-  .ed-legend {
-    display: none;
+  .ed-layer-label {
+    font-size: 11px;
   }
 }
 

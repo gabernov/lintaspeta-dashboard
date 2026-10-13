@@ -370,8 +370,64 @@ export default function DatasetEditor() {
     return saved === "rainbow" || saved === "uptd" ? saved : "default";
   });
   const roadColorModeRef = useRef(roadColorMode);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [featuresVisible, setFeaturesVisible] = useState(true);
+  const [roadsVisible, setRoadsVisible] = useState(true);
+  const featuresVisibleRef = useRef(true);
+  const roadsVisibleRef = useRef(true);
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
+
+  const DRAFT_LAYERS = [
+    "draft-points",
+    "draft-lines",
+    "draft-clusters",
+    "draft-cluster-labels",
+    "draft-selected-points",
+    "draft-selected-lines",
+  ];
+  const ROAD_LAYERS = ["roads-bg-casing", "roads-bg-line", "roads-bg-hit"];
+
+  const applyLayers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const vis = (id: string, on: boolean) => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+    };
+    DRAFT_LAYERS.forEach((id) => vis(id, featuresVisibleRef.current));
+    ROAD_LAYERS.forEach((id) => vis(id, roadsVisibleRef.current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    featuresVisibleRef.current = featuresVisible;
+    roadsVisibleRef.current = roadsVisible;
+    applyLayers();
+  }, [featuresVisible, roadsVisible, applyLayers]);
+
+  useEffect(() => {
+    if (!layersOpen && !statusOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest(".ed-layers") && !t.closest(".ed-topright")) {
+        setLayersOpen(false);
+        setStatusOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLayersOpen(false);
+        setStatusOpen(false);
+      }
+    };
+    document.addEventListener("click", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [layersOpen, statusOpen]);
 
   /* ---- basemap: stored pick, else the theme's default ---- */
   const basemapIdRef = useRef(
@@ -616,15 +672,13 @@ export default function DatasetEditor() {
     applyRuasColorsRef.current = applyRuasColors;
   }, [applyRuasColors]);
 
-  const ROAD_MODE_CYCLE: RoadColorMode[] = ["rainbow", "uptd", "default"];
-  const handleToggleRuasColors = useCallback(() => {
-    setRoadColorMode((prev) => {
-      const next =
-        ROAD_MODE_CYCLE[(ROAD_MODE_CYCLE.indexOf(prev) + 1) % ROAD_MODE_CYCLE.length];
-      localStorage.setItem(`ruas_colors_${datasetId}`, next);
-      return next;
-    });
-  }, [datasetId]);
+  const setRoadColor = useCallback(
+    (mode: RoadColorMode) => {
+      localStorage.setItem(`ruas_colors_${datasetId}`, mode);
+      setRoadColorMode(mode);
+    },
+    [datasetId]
+  );
 
   useEffect(() => {
     roadColorModeRef.current = roadColorMode;
@@ -1354,6 +1408,8 @@ export default function DatasetEditor() {
       if (featuresRef.current) {
         applyFeaturesToSource(featuresRef.current);
       }
+
+      applyLayers();
     };
 
     if (map.isStyleLoaded()) onLoad();
@@ -2310,6 +2366,8 @@ export default function DatasetEditor() {
   };
   const isActionBtn = (key: string) => key === "autopublish" || key === "publish";
   const actionBtns = toolboxBtns.filter((b) => b.show && isActionBtn(b.key));
+  const publishBtn = actionBtns.find((b) => b.key === "publish");
+  const autoBtn = actionBtns.find((b) => b.key === "autopublish");
   const visibleToolboxBtns = toolboxBtns.filter((b) => b.show && !isActionBtn(b.key));
   const visibleToolboxBtnsRef = useRef(visibleToolboxBtns);
   useEffect(() => {
@@ -2384,94 +2442,133 @@ export default function DatasetEditor() {
             </div>
           )}
 
-          {/* ---- Document status + publish actions (top-right) ---- */}
-          <div className="ed-status">
-            <div className="ed-status-head">
+          {/* ---- Status chip + Publish (top-right) ---- */}
+          <div className="ed-topright">
+            <button
+              type="button"
+              className={`ed-chip${statusOpen ? " on" : ""}`}
+              onClick={() => setStatusOpen((v) => !v)}
+              aria-expanded={statusOpen}
+              title="Status editor"
+            >
               <span className="ed-live-dot" />
-              <span className="ed-status-title">{meta.label}</span>
-              <span className="ed-status-online">{onlineCount} online</span>
-            </div>
-            <div className="ed-status-row">
-              <span className={`ed-window-pill ${editWindow?.open ? "ed-window-pill-open" : "ed-window-pill-closed"}`}>
+              <span>{onlineCount} online</span>
+              <span className="ed-chip-dot">·</span>
+              <span className={editWindow?.open ? "ed-chip-open" : "ed-chip-closed"}>
                 {editWindow?.open ? "Edit terbuka" : "Edit tertutup"}
               </span>
-              {isSuperAdmin && (
-                <button
-                  className={`ed-window-btn ${editWindow?.open ? "ed-window-btn-close" : "ed-window-btn-open"}`}
-                  onClick={toggleWindow}
-                >
-                  {editWindow?.open ? "Tutup" : "Buka"}
-                </button>
-              )}
-            </div>
-            {actionBtns.length > 0 && (
-              <div className="ed-status-actions">
-                {actionBtns.map((btn) => (
+            </button>
+
+            {publishBtn && (
+              <button
+                type="button"
+                className="ed-publish"
+                onClick={publishBtn.onClick}
+                disabled={publishBtn.disabled}
+                title={publishBtn.title}
+              >
+                {publishBtn.icon}
+                <span>Publish</span>
+              </button>
+            )}
+
+            {statusOpen && (
+              <div className="ed-popover ed-popover-right">
+                <div className="ed-popover-title">Status editor</div>
+                <div className="ed-popover-row">
+                  <span className={`ed-window-pill ${editWindow?.open ? "ed-window-pill-open" : "ed-window-pill-closed"}`}>
+                    {editWindow?.open ? "Edit terbuka" : "Edit tertutup"}
+                  </span>
+                  {isSuperAdmin && (
+                    <button
+                      className={`ed-window-btn ${editWindow?.open ? "ed-window-btn-close" : "ed-window-btn-open"}`}
+                      onClick={toggleWindow}
+                    >
+                      {editWindow?.open ? "Tutup" : "Buka"}
+                    </button>
+                  )}
+                </div>
+                {autoBtn && (
                   <button
-                    key={btn.key}
                     type="button"
-                    className={`ed-action${btn.active ? " on" : ""}${btn.key === "publish" ? " ed-action-primary" : ""}`}
-                    onClick={btn.onClick}
-                    disabled={btn.disabled}
-                    title={btn.title}
+                    className={`ed-popover-toggle${autoBtn.active ? " on" : ""}`}
+                    onClick={autoBtn.onClick}
+                    title={autoBtn.title}
                   >
-                    {btn.icon}
-                    <span className="ed-action-label">{ACTION_LABELS[btn.key] ?? btn.title}</span>
-                    {btn.key === "autopublish" && (
-                      <span className={`ed-action-state${btn.active ? " on" : ""}`}>
-                        {btn.active ? "ON" : "OFF"}
-                      </span>
-                    )}
+                    <span className="ed-action-label">{ACTION_LABELS[autoBtn.key] ?? autoBtn.title}</span>
+                    <span className={`ed-action-state${autoBtn.active ? " on" : ""}`}>
+                      {autoBtn.active ? "ON" : "OFF"}
+                    </span>
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>
 
-          <div className="ed-legend">
-              <div className="ed-legend-item">
-                {isPoint ? (
-                  <span
-                    className="ed-legend-swatch"
-                    style={{ backgroundColor: meta.defaultColor }}
-                  />
-                ) : (
-                  <span
-                    className="ed-legend-swatch-line"
-                    style={{ backgroundColor: meta.defaultColor }}
-                  />
-                )}
-                <span className="ed-legend-label">Fitur (master)</span>
-              </div>
-              {datasetId !== "ruas_jalan" && (
+          {/* ---- Layers (bottom-left) ---- */}
+          <div className="ed-layers">
+            {layersOpen && (
+              <div className="ed-layers-card" role="dialog" aria-label="Tampilkan lapisan">
+                <div className="ed-layers-title">Tampilkan Lapisan</div>
+                <div className="ed-layers-name">{meta.label}</div>
                 <button
                   type="button"
-                  className="ed-legend-item ed-legend-item-road"
-                  onClick={handleToggleRuasColors}
-                  title="Klik untuk ganti warna ruas: pelangi → per UPTD → default"
+                  className={`ed-layer-row${featuresVisible ? " on" : ""}`}
+                  onClick={() => setFeaturesVisible((v) => !v)}
+                  aria-pressed={featuresVisible}
                 >
                   <span
-                    className="ed-legend-swatch-line"
-                    style={{
-                      background:
-                        roadColorMode === "rainbow"
-                          ? "linear-gradient(90deg,#ef4444,#f97316,#eab308,#22c55e,#3b82f6,#8b5cf6)"
-                          : roadColorMode === "uptd"
-                          ? "linear-gradient(90deg,#3b82f6,#22c55e,#eab308,#ef4444)"
-                          : "#94a3b8",
-                    }}
+                    className={`ed-layer-swatch${isPoint ? " is-dot" : " is-line"}`}
+                    style={{ background: meta.defaultColor }}
                   />
-                  <span className="ed-legend-label">Ruas jalan (referensi)</span>
-                  <span className={`ed-legend-mode${roadColorMode !== "default" ? " on" : ""}`}>
-                    {roadColorMode === "rainbow"
-                      ? "Pelangi"
-                      : roadColorMode === "uptd"
-                      ? "Per UPTD"
-                      : "Default"}
-                  </span>
+                  <span className="ed-layer-label">Fitur</span>
+                  <span className="ed-layer-state">{featuresVisible ? "On" : "Off"}</span>
                 </button>
-              )}
-            </div>
+                {datasetId !== "ruas_jalan" && (
+                  <>
+                    <button
+                      type="button"
+                      className={`ed-layer-row${roadsVisible ? " on" : ""}`}
+                      onClick={() => setRoadsVisible((v) => !v)}
+                      aria-pressed={roadsVisible}
+                    >
+                      <span className="ed-layer-swatch is-line" style={{ background: "#94a3b8" }} />
+                      <span className="ed-layer-label">Ruas jalan (referensi)</span>
+                      <span className="ed-layer-state">{roadsVisible ? "On" : "Off"}</span>
+                    </button>
+                    <div className="ed-layer-field">
+                      <span className="ed-layer-label">Warna ruas</span>
+                      <div className="ed-seg">
+                        {(["default", "rainbow", "uptd"] as RoadColorMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`ed-seg-btn${roadColorMode === mode ? " on" : ""}`}
+                            onClick={() => setRoadColor(mode)}
+                          >
+                            {mode === "default" ? "Default" : mode === "rainbow" ? "Pelangi" : "Per UPTD"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <button
+              type="button"
+              className={`ed-layers-btn${layersOpen ? " on" : ""}`}
+              onClick={() => setLayersOpen((v) => !v)}
+              aria-expanded={layersOpen}
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                <polyline points="2 17 12 22 22 17" />
+                <polyline points="2 12 12 17 22 12" />
+              </svg>
+              <span>Lapisan</span>
+            </button>
+          </div>
 
           {/* ---- Marquee overlay (select tool) ---- */}
           {activeTool === "select" && marquee && (
