@@ -2361,27 +2361,7 @@ export default function DatasetEditor() {
       {/* -------- map + overlays -------- */}
       <div className="ed-body">
         <div className="ed-map-wrap" ref={mapContainerRef}>
-        {/* ---- Top-left floating panel: title, online, edit window ---- */}
-        <div className="ed-panel-tl">
-          <div className="ed-panel-tl-title">{meta.label}</div>
-          <div className="ed-panel-tl-sub">
-            <span className="ed-live-dot" />
-            <span>{onlineCount} online</span>
-            <div className={`ed-window-pill ${editWindow?.open ? "ed-window-pill-open" : "ed-window-pill-closed"}`}>
-              {editWindow?.open ? "Edit terbuka" : "Edit tertutup"}
-            </div>
-            {isSuperAdmin && (
-              <button
-                className={`ed-window-btn ${editWindow?.open ? "ed-window-btn-close" : "ed-window-btn-open"}`}
-                onClick={toggleWindow}
-              >
-                {editWindow?.open ? "Tutup" : "Buka"}
-              </button>
-            )}
-          </div>
-        </div>
-
-          {/* ---- Toolbar (top-center) / Actions (top-right) / Legend (bottom-left) ---- */}
+          {/* ---- Tools (top-center) ---- */}
           {(isSuperAdmin || isEditor) && (
             <div className="ed-toolbar" role="toolbar" aria-label="Alat editor">
               {visibleToolboxBtns.map((btn, i) => (
@@ -2404,28 +2384,49 @@ export default function DatasetEditor() {
             </div>
           )}
 
-          {actionBtns.length > 0 && (
-            <div className="ed-actions">
-              {actionBtns.map((btn) => (
-                <button
-                  key={btn.key}
-                  type="button"
-                  className={`ed-action${btn.active ? " on" : ""}${btn.key === "publish" ? " ed-action-primary" : ""}`}
-                  onClick={btn.onClick}
-                  disabled={btn.disabled}
-                  title={btn.title}
-                >
-                  {btn.icon}
-                  <span className="ed-action-label">{ACTION_LABELS[btn.key] ?? btn.title}</span>
-                  {btn.key === "autopublish" && (
-                    <span className={`ed-action-state${btn.active ? " on" : ""}`}>
-                      {btn.active ? "ON" : "OFF"}
-                    </span>
-                  )}
-                </button>
-              ))}
+          {/* ---- Document status + publish actions (top-right) ---- */}
+          <div className="ed-status">
+            <div className="ed-status-head">
+              <span className="ed-live-dot" />
+              <span className="ed-status-title">{meta.label}</span>
+              <span className="ed-status-online">{onlineCount} online</span>
             </div>
-          )}
+            <div className="ed-status-row">
+              <span className={`ed-window-pill ${editWindow?.open ? "ed-window-pill-open" : "ed-window-pill-closed"}`}>
+                {editWindow?.open ? "Edit terbuka" : "Edit tertutup"}
+              </span>
+              {isSuperAdmin && (
+                <button
+                  className={`ed-window-btn ${editWindow?.open ? "ed-window-btn-close" : "ed-window-btn-open"}`}
+                  onClick={toggleWindow}
+                >
+                  {editWindow?.open ? "Tutup" : "Buka"}
+                </button>
+              )}
+            </div>
+            {actionBtns.length > 0 && (
+              <div className="ed-status-actions">
+                {actionBtns.map((btn) => (
+                  <button
+                    key={btn.key}
+                    type="button"
+                    className={`ed-action${btn.active ? " on" : ""}${btn.key === "publish" ? " ed-action-primary" : ""}`}
+                    onClick={btn.onClick}
+                    disabled={btn.disabled}
+                    title={btn.title}
+                  >
+                    {btn.icon}
+                    <span className="ed-action-label">{ACTION_LABELS[btn.key] ?? btn.title}</span>
+                    {btn.key === "autopublish" && (
+                      <span className={`ed-action-state${btn.active ? " on" : ""}`}>
+                        {btn.active ? "ON" : "OFF"}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="ed-legend">
               <div className="ed-legend-item">
