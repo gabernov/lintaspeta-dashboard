@@ -89,6 +89,33 @@ export const DATASETS: DatasetMeta[] = [
     regionPropertyKey: "UPTD",
     defaultColor: "#d97706",
   },
+  {
+    id: "pengawasan_angkutan_barang",
+    label: "Pengawasan Angkutan Barang",
+    draftTable: "pengawasan_angkutan_barang_draft",
+    publishedTable: "pengawasan_angkutan_barang_published",
+    geometryType: "Point",
+    regionField: "region",
+    regionLabel: "UPTD",
+    sourceIdLabel: "ID Titik",
+    formFields: [
+      {
+        key: "jenis",
+        label: "Jenis Titik",
+        type: "select",
+        options: ["rambu_kelas_jalan", "rambu_mst", "rambu_pembatasan", "tambang"],
+      },
+      { key: "kode_ruas", label: "Kode Ruas", type: "text" },
+      { key: "nama_ruas", label: "Nama Ruas", type: "text" },
+      { key: "kelas_jalan", label: "Kelas Jalan", type: "select", options: ["I", "II", "III"] },
+      { key: "fungsi", label: "Fungsi", type: "text" },
+      { key: "ujung_ruas", label: "Ujung Ruas", type: "text" },
+      { key: "panjang_km", label: "Panjang (km)", type: "number" },
+      { key: "uptd", label: "UPTD", type: "text" },
+    ],
+    regionPropertyKey: "uptd",
+    defaultColor: "#7c3aed",
+  },
 ];
 
 export function getDataset(id: string): DatasetMeta | undefined {

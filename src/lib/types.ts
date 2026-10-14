@@ -11,7 +11,7 @@ export interface Profile {
   updated_at: string;
 }
 
-export type DatasetId = "ruas_jalan" | "sekolah" | "rambu" | "apj";
+export type DatasetId = "ruas_jalan" | "sekolah" | "rambu" | "apj" | "pengawasan_angkutan_barang";
 
 export type GeometryType = "Point" | "LineString" | "Polygon";
 

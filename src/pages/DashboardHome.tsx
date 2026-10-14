@@ -36,6 +36,14 @@ const ICONS: Record<DatasetMeta["id"], React.ReactNode> = {
       <circle cx="16.5" cy="10.5" r="1.8" fill="currentColor" stroke="none" />
     </svg>
   ),
+  pengawasan_angkutan_barang: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 7h11v10H2z" />
+      <path d="M13 10h4l3 3v4h-7z" />
+      <circle cx="6" cy="18.5" r="1.6" />
+      <circle cx="16.5" cy="18.5" r="1.6" />
+    </svg>
+  ),
 };
 
 interface PivotValue {
@@ -84,6 +92,11 @@ const PIVOT_KEYS: Record<DatasetMeta["id"], Array<{ key: string; label: string }
     { key: "unit_kerja_kode", label: "UPTD" },
     { key: "status", label: "Status" },
     { key: "KABUPATEN", label: "Kab/Kota" },
+  ],
+  pengawasan_angkutan_barang: [
+    { key: "jenis", label: "Jenis Titik" },
+    { key: "kelas_jalan", label: "Kelas Jalan" },
+    { key: "uptd", label: "UPTD" },
   ],
 };
 
