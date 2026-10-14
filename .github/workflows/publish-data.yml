@@ -8,7 +8,7 @@ on:
       datasets:
         description: "Comma-separated datasets to publish (default: all)"
         required: false
-        default: "ruas_jalan,sekolah,rambu,apj"
+        default: "ruas_jalan,sekolah,rambu,apj,pengawasan_angkutan_barang"
 
 jobs:
   build-and-deploy:

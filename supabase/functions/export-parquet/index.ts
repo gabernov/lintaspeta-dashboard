@@ -8,7 +8,7 @@ const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 const githubToken = Deno.env.get("GITHUB_DISPATCH_TOKEN")!;
 const githubRepo = Deno.env.get("GITHUB_REPO") ?? "gabernov/lintaspeta-dashboard";
 
-const DATASETS = ["ruas_jalan", "sekolah", "rambu", "apj"];
+const DATASETS = ["ruas_jalan", "sekolah", "rambu", "apj", "pengawasan_angkutan_barang"];
 
 Deno.serve(async (req) => {
   const cors = {

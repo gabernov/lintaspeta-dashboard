@@ -132,6 +132,24 @@ SCHEMAS = {
         "geometry_type": "Point",
         "file": "maps/apj/data/pju_detail.parquet",
     },
+    "pengawasan_angkutan_barang": {
+        "columns": [
+            ("jenis", pa.string(), ("properties", "jenis")),
+            ("kode_ruas", pa.string(), ("properties", "kode_ruas")),
+            ("nama_ruas", pa.string(), ("properties", "nama_ruas")),
+            ("kelas_jalan", pa.string(), ("properties", "kelas_jalan")),
+            ("fungsi", pa.string(), ("properties", "fungsi")),
+            ("status", pa.string(), ("properties", "status")),
+            ("uptd", pa.string(), ("properties", "uptd")),
+            ("ujung_ruas", pa.string(), ("properties", "ujung_ruas")),
+            ("panjang_km", pa.float64(), ("properties", "panjang_km")),
+            ("latitude", pa.float64(), ("properties", "latitude")),
+            ("longitude", pa.float64(), ("properties", "longitude")),
+            ("rambu_id", pa.string(), ("properties", "rambu_id")),
+        ],
+        "geometry_type": "Point",
+        "file": "maps/pengawasan-angkutanbarang/data/pengawasan.parquet",
+    },
 }
 
 TABLE_NAMES = {
@@ -139,6 +157,7 @@ TABLE_NAMES = {
     "sekolah": "sekolah_published",
     "rambu": "rambu_published",
     "apj": "apj_published",
+    "pengawasan_angkutan_barang": "pengawasan_angkutan_barang_published",
 }
 
 
