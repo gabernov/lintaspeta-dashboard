@@ -7,6 +7,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
+import { JENIS_ICON_IDS, KELAS_ICON_IDS, ensurePointIcons } from "../lib/pointIcons";
 import { ED_THEME_EVENT, getCurrentTheme, type ThemeMode } from "../lib/theme";
 import { useAuth } from "../auth/AuthContext";
 import AttributeForm from "../components/editor/AttributeForm";
@@ -219,7 +220,11 @@ function sampleVertices(
 /*  Point layer stack (clusters + labels + points) shared by onLoad    */
 /*  and the cluster toggle so the source can be re-created cleanly.    */
 /* ------------------------------------------------------------------ */
-function addPointDraftLayers(map: maplibregl.Map, color: string) {
+function addPointDraftLayers(
+  map: maplibregl.Map,
+  color: string,
+  withJenisIcons: boolean
+) {
   map.addLayer({
     id: "draft-clusters",
     type: "circle",
@@ -256,6 +261,75 @@ function addPointDraftLayers(map: maplibregl.Map, color: string) {
       "text-halo-width": 1.5,
     },
   });
+  if (withJenisIcons) {
+    ensurePointIcons(map);
+    // The circle becomes an invisible hit target (keeps the click/hover
+    // handlers and the generous tap area) while the icon layer carries the
+    // visual, so the dataset's jenis is readable at a glance.
+    map.addLayer({
+      id: "draft-points",
+      type: "circle",
+      source: "draft",
+      filter: ["!", ["has", "point_count"]],
+      paint: {
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          6, 6,
+          10, 8,
+          13, 10,
+          16, 9,
+          19, 7,
+          22, 6,
+        ],
+        "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-width": 0,
+      },
+    });
+    map.addLayer({
+      id: "draft-point-icons",
+      type: "symbol",
+      source: "draft",
+      filter: ["!", ["has", "point_count"]],
+      layout: {
+        // Kelas-jalan signs follow kelas_jalan (white disc, red ring, Roman
+        // numeral); every other jenis uses its own shape.
+        "icon-image": [
+          "case",
+          ["==", ["get", "jenis"], "rambu_kelas_jalan"],
+          [
+            "match", ["get", "kelas_jalan"],
+            "I", KELAS_ICON_IDS["I"],
+            "II", KELAS_ICON_IDS["II"],
+            "III", KELAS_ICON_IDS["III"],
+            KELAS_ICON_IDS["I"],
+          ],
+          [
+            "match", ["get", "jenis"],
+            "rambu_mst", JENIS_ICON_IDS["rambu_mst"],
+            "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
+            "tambang", JENIS_ICON_IDS["tambang"],
+            "posko", JENIS_ICON_IDS["posko"],
+            JENIS_ICON_IDS["rambu_kelas_jalan"],
+          ],
+        ],
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          6, 0.34,
+          12, 0.5,
+          16, 0.6,
+          20, 0.68,
+        ],
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-anchor": "center",
+      },
+    });
+    return;
+  }
   map.addLayer({
     id: "draft-points",
     type: "circle",
@@ -362,6 +436,7 @@ export default function DatasetEditor() {
   const roadUPTDRef = useRef<string[]>([...ROAD_UPTD]);
   const [layersOpen, setLayersOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [featuresVisible, setFeaturesVisible] = useState(true);
   const [roadsVisible, setRoadsVisible] = useState(true);
   const featuresVisibleRef = useRef(true);
@@ -400,9 +475,10 @@ export default function DatasetEditor() {
     if (!layersOpen && !statusOpen) return;
     const onDoc = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (!t.closest(".ed-layers") && !t.closest(".ed-topright")) {
+      if (!t.closest(".ed-layers") && !t.closest(".ed-topright") && !t.closest(".ed-addmenu")) {
         setLayersOpen(false);
         setStatusOpen(false);
+        setAddMenuOpen(false);
       }
     };
     const onKey = (e: KeyboardEvent) => {
@@ -457,7 +533,8 @@ export default function DatasetEditor() {
   }, []);
 
   /** Shared draw-start handler used by both toolbar and floating toolbox. */
-  const handleStartDraw = useCallback((target: "point" | "line") => {
+  const handleStartDraw = useCallback(
+    (target: "point" | "line", prefill: GeoProps | null = null, hint: string | null = null) => {
     drawTargetRef.current = target;
     setDrawTarget(target);
     // Exit any active edit session (form + vertex handles) so drawing starts
@@ -467,15 +544,25 @@ export default function DatasetEditor() {
     setSelectedFeature(null);
     setPendingGeometry(null);
     setFormMode("create");
-    setNearestPrefill(null);
-    setNearestHint(null);
+    setNearestPrefill(prefill);
+    setNearestHint(hint);
     setSelectedIds([]);
     if (tdRef.current) {
       tdRef.current.clear();
       tdRef.current.setMode(target === "point" ? "point" : "linestring");
     }
     setActiveTool("draw");
-  }, []);
+    },
+    []
+  );
+
+  const startJenisDraw = useCallback(
+    (jenis: string) => {
+      setAddMenuOpen(false);
+      handleStartDraw("point", { jenis }, `Jenis titik: ${jenis.replace(/_/g, " ")}`);
+    },
+    [handleStartDraw]
+  );
 
   const applyDragPan = useCallback((tool: "select" | "pan" | "draw") => {
     const map = mapRef.current;
@@ -1013,7 +1100,7 @@ export default function DatasetEditor() {
       const map = mapRef.current;
       if (!map || !isPoint) return;
       if (!map.getSource("draft")) return;
-      for (const lid of ["draft-clusters", "draft-cluster-labels", "draft-points"]) {
+      for (const lid of ["draft-clusters", "draft-cluster-labels", "draft-points", "draft-point-icons"]) {
         if (map.getLayer(lid)) map.removeLayer(lid);
       }
       map.removeSource("draft");
@@ -1024,7 +1111,11 @@ export default function DatasetEditor() {
         clusterMaxZoom: 14,
         clusterRadius: 50,
       });
-      addPointDraftLayers(map, meta?.defaultColor ?? "#2563eb");
+      addPointDraftLayers(
+        map,
+        meta?.defaultColor ?? "#2563eb",
+        !!meta?.formFields.some((f) => f.key === "jenis")
+      );
       const fc = featuresRef.current;
       if (fc) {
         const src = map.getSource("draft");
@@ -1228,7 +1319,11 @@ export default function DatasetEditor() {
       });
 
       if (isPoint) {
-        addPointDraftLayers(map, meta.defaultColor);
+        addPointDraftLayers(
+          map,
+          meta.defaultColor,
+          meta.formFields.some((f) => f.key === "jenis")
+        );
       } else {
         map.addLayer({
           id: "draft-lines",
@@ -1250,13 +1345,14 @@ export default function DatasetEditor() {
         data: { type: "FeatureCollection", features: [] },
       });
       if (isPoint) {
+        const iconPoints = meta.formFields.some((f) => f.key === "jenis");
         map.addLayer({
           id: "draft-selected-points",
           type: "circle",
           source: "draft-selected",
           paint: {
-            "circle-radius": 14,
-            "circle-color": "rgba(245, 158, 11, 0.35)",
+            "circle-radius": iconPoints ? 16 : 14,
+            "circle-color": iconPoints ? "rgba(0,0,0,0)" : "rgba(245, 158, 11, 0.35)",
             "circle-stroke-color": "#f59e0b",
             "circle-stroke-width": 3,
           },
@@ -2188,7 +2284,10 @@ export default function DatasetEditor() {
           <path d="M4 17l6-8 4 4 6-7" />
         </svg>
       ),
-      onClick: () => handleStartDraw(isPoint ? "point" : "line"),
+      onClick: () =>
+        jenisOptions.length > 0
+          ? setAddMenuOpen((v) => !v)
+          : handleStartDraw(isPoint ? "point" : "line"),
     },
     {
       key: "undo",
@@ -2377,6 +2476,8 @@ export default function DatasetEditor() {
   const actionBtns = toolboxBtns.filter((b) => b.show && isActionBtn(b.key));
   const publishBtn = actionBtns.find((b) => b.key === "publish");
   const autoBtn = actionBtns.find((b) => b.key === "autopublish");
+  const jenisField = meta?.formFields.find((f) => f.key === "jenis");
+  const jenisOptions = jenisField?.options ?? [];
   const visibleToolboxBtns = toolboxBtns.filter((b) => b.show && !isActionBtn(b.key));
   const visibleToolboxBtnsRef = useRef(visibleToolboxBtns);
   useEffect(() => {
@@ -2447,6 +2548,22 @@ export default function DatasetEditor() {
                     <span className="ed-tool-key">{i + 1}</span>
                   </button>
                 </Fragment>
+              ))}
+            </div>
+          )}
+
+          {addMenuOpen && jenisOptions.length > 0 && (
+            <div className="ed-addmenu">
+              <div className="ed-popover-title">Tambah titik</div>
+              {jenisOptions.map((jenis) => (
+                <button
+                  key={jenis}
+                  type="button"
+                  className="ed-addmenu-item"
+                  onClick={() => startJenisDraw(jenis)}
+                >
+                  {jenis.replace(/_/g, " ")}
+                </button>
               ))}
             </div>
           )}

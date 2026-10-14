@@ -103,7 +103,7 @@ export const DATASETS: DatasetMeta[] = [
         key: "jenis",
         label: "Jenis Titik",
         type: "select",
-        options: ["rambu_kelas_jalan", "rambu_mst", "rambu_pembatasan", "tambang"],
+        options: ["rambu_kelas_jalan", "rambu_mst", "rambu_pembatasan", "tambang", "posko"],
       },
       { key: "kode_ruas", label: "Kode Ruas", type: "text" },
       { key: "nama_ruas", label: "Nama Ruas", type: "text" },
