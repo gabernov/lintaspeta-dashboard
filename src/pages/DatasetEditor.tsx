@@ -955,20 +955,46 @@ export default function DatasetEditor() {
 
   const handlePublish = useCallback(async () => {
     if (!datasetId || !isSuperAdmin) return;
-    if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`))
-      return;
+    if (!window.confirm(`Publish dataset ${meta?.label} ke peta publik?`)) return;
     setPublishBusy(true);
-    const { data: _result, error } = await supabase.rpc(
-      "publish_dataset_safe",
-      { p_dataset: datasetId }
-    );
-    setPublishBusy(false);
-    if (error) {
-      showToast("Gagal publish: " + error.message, false);
-      return;
+    try {
+      // Publishing must go through the export-parquet function: it runs the
+      // publish RPC AND dispatches the GitHub workflow that rebuilds the portal
+      // parquet + redeploys the public map. Calling the RPC alone left the
+      // public map stale.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Sesi tidak ditemukan, silakan login ulang.");
+
+      const { data, error } = await supabase.functions.invoke("export-parquet", {
+        body: { datasets: [datasetId] },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+
+      const res = (data ?? {}) as {
+        published?: Record<string, { published?: number } | { error?: string } | null>;
+        dispatchError?: string;
+      };
+      if (res.dispatchError) {
+        throw new Error("Data ter-publish, tapi pipeline gagal dipicu: " + res.dispatchError);
+      }
+      const entry = res.published?.[datasetId] as { published?: number } | undefined;
+      const count = entry?.published;
+      showToast(
+        count != null
+          ? `Publish selesai (${count} fitur). Peta publik diperbarui otomatis.`
+          : "Publish selesai. Peta publik diperbarui otomatis.",
+        true
+      );
+    } catch (err) {
+      showToast(
+        "Gagal publish: " + (err instanceof Error ? err.message : String(err)),
+        false
+      );
+    } finally {
+      setPublishBusy(false);
     }
-    const res = _result as { published: number; dataset: string; at: string };
-    showToast(`Berhasil publish ${res.published} fitur`, true);
   }, [datasetId, isSuperAdmin, meta?.label, showToast]);
 
   const toggleAutoSchedule = useCallback(() => {
