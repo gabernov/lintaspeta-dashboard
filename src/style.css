@@ -250,6 +250,9 @@ body {
 }
 .shell-collapsed .sidebar {
   width: 0;
+  min-width: 0;
+  padding: 0;
+  border-right: 0;
   opacity: 0;
   overflow: hidden;
 }
