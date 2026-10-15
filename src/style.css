@@ -258,8 +258,8 @@ body {
 }
 .content-topbar {
   position: absolute;
-  top: var(--ed-map-inset);
-  left: var(--ed-map-inset);
+  top: var(--ed-float-inset);
+  left: var(--ed-float-inset);
   z-index: 40;
   display: flex;
   align-items: center;
@@ -267,12 +267,6 @@ body {
   background: transparent;
   border: none;
   padding: 0;
-}
-/* The topbar sits flush on the map card's top-left corner, so its leading
-   control takes the map's corner radius and nests into the card instead of
-   hanging off the rounded edge. */
-.content-topbar > :first-child {
-  border-top-left-radius: var(--ed-map-radius);
 }
 .sidebar-toggle {
   width: 34px;
@@ -670,6 +664,8 @@ body {
   --map-backdrop: #1e293b;
   --ed-map-inset: 8px;
   --ed-map-radius: 16px;
+  --ed-float-gap: 12px;
+  --ed-float-inset: calc(var(--ed-map-inset) + var(--ed-float-gap));
 }
 :root[data-theme="light"] {
   --map-backdrop: #cbd5e1;
@@ -714,8 +710,8 @@ body {
 /* Side Panel — floating card on the left, under the topbar */
 .ed-panel {
   position: absolute;
-  top: 56px;
-  left: 12px;
+  top: calc(var(--ed-float-gap) + 44px);
+  left: var(--ed-float-gap);
   right: auto;
   z-index: 6;
   width: 340px;
@@ -941,8 +937,8 @@ body {
 /* ---- Status chip + Publish (top-right) ---- */
 .ed-topright {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--ed-float-gap);
+  right: var(--ed-float-gap);
   z-index: 7;
   display: flex;
   align-items: center;
@@ -1119,7 +1115,7 @@ body {
 /* ---- Editor toolbar (top-center, horizontal) ---- */
 .ed-toolbar {
   position: absolute;
-  top: 12px;
+  top: var(--ed-float-gap);
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
@@ -1267,7 +1263,7 @@ body {
 .ed-layers {
   position: absolute;
   bottom: 46px;
-  left: 12px;
+  left: var(--ed-float-gap);
   z-index: 9;
   display: flex;
   flex-direction: column;
