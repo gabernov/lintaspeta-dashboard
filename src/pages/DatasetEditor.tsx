@@ -7,7 +7,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
-import { JENIS_ICON_IDS, KELAS_ICON_IDS, ensurePointIcons } from "../lib/pointIcons";
+import { JENIS_ICON_IDS, KELAS_ICON_IDS, ensurePointIcons, jenisLabel } from "../lib/pointIcons";
 import { ED_THEME_EVENT, getCurrentTheme, type ThemeMode } from "../lib/theme";
 import { useAuth } from "../auth/AuthContext";
 import AttributeForm from "../components/editor/AttributeForm";
@@ -380,6 +380,10 @@ export default function DatasetEditor() {
   const drawTargetRef = useRef<"point" | "line">(
     meta?.geometryType === "Point" ? "point" : "line"
   );
+  // Jenis chosen from the "Tambah titik" menu for the point being drawn; the
+  // draw-finish handler reads it to keep the create form and the on-map preview
+  // in sync with the picked jenis.
+  const drawJenisRef = useRef<string | null>(null);
   const vertexDragRef = useRef<{
     featureId: string;
     origGeom: LineGeom;
@@ -559,7 +563,8 @@ export default function DatasetEditor() {
   const startJenisDraw = useCallback(
     (jenis: string) => {
       setAddMenuOpen(false);
-      handleStartDraw("point", { jenis }, `Jenis titik: ${jenis.replace(/_/g, " ")}`);
+      drawJenisRef.current = jenis;
+      handleStartDraw("point", { jenis }, `Jenis titik: ${jenisLabel(jenis)}`);
     },
     [handleStartDraw]
   );
@@ -1144,6 +1149,7 @@ export default function DatasetEditor() {
     });
 
     mapRef.current = map;
+    const iconPoints = meta.formFields.some((f) => f.key === "jenis");
 
     popupRef.current = new maplibregl.Popup({
       closeButton: true,
@@ -1345,7 +1351,6 @@ export default function DatasetEditor() {
         data: { type: "FeatureCollection", features: [] },
       });
       if (isPoint) {
-        const iconPoints = meta.formFields.some((f) => f.key === "jenis");
         map.addLayer({
           id: "draft-selected-points",
           type: "circle",
@@ -1366,6 +1371,51 @@ export default function DatasetEditor() {
             "line-color": "#f59e0b",
             "line-width": 8,
             "line-opacity": 0.85,
+          },
+        });
+      }
+
+      if (isPoint && iconPoints) {
+        map.addSource("draft-pending", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+        map.addLayer({
+          id: "draft-pending-icons",
+          type: "symbol",
+          source: "draft-pending",
+          layout: {
+            "icon-image": [
+              "case",
+              ["==", ["get", "jenis"], "rambu_kelas_jalan"],
+              [
+                "match", ["get", "kelas_jalan"],
+                "I", KELAS_ICON_IDS["I"],
+                "II", KELAS_ICON_IDS["II"],
+                "III", KELAS_ICON_IDS["III"],
+                KELAS_ICON_IDS["I"],
+              ],
+              [
+                "match", ["get", "jenis"],
+                "rambu_mst", JENIS_ICON_IDS["rambu_mst"],
+                "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
+                "tambang", JENIS_ICON_IDS["tambang"],
+                "posko", JENIS_ICON_IDS["posko"],
+                JENIS_ICON_IDS["rambu_kelas_jalan"],
+              ],
+            ],
+            "icon-size": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              6, 0.34,
+              12, 0.5,
+              16, 0.6,
+              20, 0.68,
+            ],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-anchor": "center",
           },
         });
       }
@@ -1540,7 +1590,24 @@ export default function DatasetEditor() {
       }
       const adapter = new TerraDrawMapLibreGLAdapter({ map });
 
-      const modes = [new TerraDrawPointMode(), new TerraDrawLineStringMode()];
+      const modes = [
+        // Icon datasets render the drawn point through draft-pending-icons, so
+        // TerraDraw's own dot is switched off to avoid a plain dot sitting on
+        // top of the icon while the create form is open.
+        new TerraDrawPointMode(
+          iconPoints
+            ? {
+                styles: {
+                  pointColor: "#000000",
+                  pointWidth: 0,
+                  pointOutlineColor: "#000000",
+                  pointOutlineWidth: 0,
+                },
+              }
+            : {}
+        ),
+        new TerraDrawLineStringMode(),
+      ];
 
       const td = new TerraDraw({ adapter, modes });
       td.start();
@@ -1601,6 +1668,9 @@ export default function DatasetEditor() {
                 setNearestPrefill(null);
                 setNearestHint(null);
               }
+            } else if (drawJenisRef.current) {
+              setNearestPrefill({ jenis: drawJenisRef.current });
+              setNearestHint(`Jenis titik: ${jenisLabel(drawJenisRef.current)}`);
             } else {
               setNearestPrefill(null);
               setNearestHint(null);
@@ -1631,6 +1701,30 @@ export default function DatasetEditor() {
       mapRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---- Preview the point being added with its jenis icon (TerraDraw's own
+     dot is hidden for icon datasets) until the create form is saved. ---- */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("draft-pending");
+    if (!src || !("setData" in src)) return;
+    const jenis = drawJenisRef.current;
+    const features =
+      pendingGeometry && pendingGeometry.type === "Point" && jenis
+        ? [
+            {
+              type: "Feature" as const,
+              properties: { jenis, kelas_jalan: "" },
+              geometry: pendingGeometry,
+            },
+          ]
+        : [];
+    (src as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features,
+    });
+  }, [pendingGeometry]);
 
   /* ---- basemap + theme: switch the map style (overlays rebuild on style.load) ---- */
   useEffect(() => {
@@ -2562,7 +2656,7 @@ export default function DatasetEditor() {
                   className="ed-addmenu-item"
                   onClick={() => startJenisDraw(jenis)}
                 >
-                  {jenis.replace(/_/g, " ")}
+                  {jenisLabel(jenis)}
                 </button>
               ))}
             </div>

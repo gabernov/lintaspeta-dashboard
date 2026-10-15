@@ -45,6 +45,18 @@ export const KELAS_ICON_IDS: Record<string, string> = {
   III: "ed-kelas-III",
 };
 
+export const JENIS_LABELS: Record<string, string> = {
+  rambu_kelas_jalan: "Rambu Kelas Jalan",
+  rambu_mst: "Rambu MST",
+  rambu_pembatasan: "Rambu Pembatasan Angkutan",
+  tambang: "Lokasi Tambang",
+  posko: "Titik Posko Pengawasan",
+};
+
+export function jenisLabel(jenis: string): string {
+  return JENIS_LABELS[jenis] ?? jenis.replace(/_/g, " ");
+}
+
 function roundRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
