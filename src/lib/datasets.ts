@@ -8,7 +8,7 @@ export const DATASETS: DatasetMeta[] = [
     draftTable: "ruas_jalan_draft",
     publishedTable: "ruas_jalan_published",
     geometryType: "LineString",
-    regionField: "region", // populated from unit_kerja_kode (UPTD-I..VI)
+    regionField: "region", // populated from unit_kerja_kode (UPTD-I..IV)
     regionLabel: "UPTD",
     sourceIdLabel: "ID Ruas",
     formFields: [

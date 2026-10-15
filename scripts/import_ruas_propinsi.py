@@ -35,6 +35,18 @@ LEGACY_ALIAS_TARGET = {
     "22.00.392.1": "CIBUTUN BALEWER",
 }
 
+DISHUB_UPTD_BY_KAB = {
+    "UPTD-I": ["kota_depok", "kab_bekasi", "kota_bekasi", "kab_bogor", "kota_bogor",
+               "kab_karawang", "kab_sukabumi", "kota_sukabumi"],
+    "UPTD-II": ["kota_bandung", "kab_bandung", "kab_bandungbarat", "kota_cimahi",
+                "kab_purwakarta", "kab_sumedang", "kab_cianjur"],
+    "UPTD-III": ["kab_garut", "kab_tasikmalaya", "kota_tasikmalaya", "kab_ciamis",
+                 "kota_banjar", "kab_pangandaran"],
+    "UPTD-IV": ["kota_cirebon", "kab_cirebon", "kab_indramayu", "kab_kuningan",
+                "kab_majalengka", "kab_subang"],
+}
+DISHUB_UPTD_BY_SLUG = {slug: uptd for uptd, slugs in DISHUB_UPTD_BY_KAB.items() for slug in slugs}
+
 COPY_LAYOUT = {
     r"maps\ruas-jalan\data\ruas_jalan.parquet": ("canonical",),
     r"maps\sekolah\data\ruas_jalan.parquet": ("canonical",),
@@ -83,10 +95,10 @@ def code_candidates(kode):
 def slug_for_kabkota(raw):
     slug = norm(raw).lower().replace(" ", "_")
     if slug.startswith("kabupaten_"):
-        return "kab_" + slug[len("kabupaten_"):]
-    if slug.startswith("kota_"):
-        return "kota_" + slug[len("kota_"):]
-    return slug
+        slug = "kab_" + slug[len("kabupaten_"):]
+    elif slug.startswith("kota_"):
+        slug = "kota_" + slug[len("kota_"):]
+    return {"kab_bandung_barat": "kab_bandungbarat"}.get(slug, slug)
 
 
 def extract_embedded_geometry(bundle_text):
@@ -244,6 +256,7 @@ def resolve_geometry(geometry_by_id, attr_ids):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--portal", required=True)
+    ap.add_argument("--legacy", default=None, help="legacy ruas_jalan parquet used for code/name carry-over")
     ap.add_argument("--out", default=".ruas-out")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--no-copies", action="store_true")
@@ -258,7 +271,8 @@ def main():
     geometry_by_id = {str(g["id_ruas_jalan"]): g for g in geometry_rows}
     name_index = {norm(r["nama_ruas_jalan"]): str(r["id_ruas_jalan"]) for r in api}
 
-    legacy = pq.read_table(os.path.join(args.portal, r"maps\pengawasan-angkutanbarang\data\ruas_jalan.parquet")).to_pylist()
+    legacy_path = args.legacy or os.path.join(args.portal, r"maps\pengawasan-angkutanbarang\data\ruas_jalan.parquet")
+    legacy = pq.read_table(legacy_path).to_pylist()
     legacy_by_kode = {str(r["kode_number"]): r for r in legacy}
     legacy_map, legacy_modes = build_legacy_map(legacy, name_index, set(attr_by_id))
     reverse = {}
@@ -293,7 +307,7 @@ def main():
         if attr:
             kab_raw = attr["kab_kota"]
             slug = slug_for_kabkota(kab_raw)
-            uptd = UPTD_ROMAN.get(attr["uptd_id"], "")
+            uptd_pu = f"UPTD {attr['uptd_id']}" if attr.get("uptd_id") else ""
             nama = attr["nama_ruas_jalan"]
             panjang = round(float(attr["panjang"]) / 1000.0, 3) if attr.get("panjang") else None
             wil = attr["wil_uptd"]
@@ -307,7 +321,7 @@ def main():
             near_attr = attr_by_id[nearest]
             kab_raw = near_attr["kab_kota"]
             slug = slug_for_kabkota(kab_raw)
-            uptd = UPTD_ROMAN.get(near_attr["uptd_id"], "")
+            uptd_pu = f"UPTD {near_attr['uptd_id']}" if near_attr.get("uptd_id") else ""
             nama = ""
             panjang = None
             wil = near_attr["wil_uptd"]
@@ -317,6 +331,8 @@ def main():
             lokasi = BPS_BY_SLUG.get(slug, "")
         if not lokasi and old is not None and old.get("lokasi_kode") is not None:
             lokasi = str(int(float(old["lokasi_kode"])))
+
+        uptd = DISHUB_UPTD_BY_SLUG.get(slug, "")
 
         row_id = str(old["id"]) if old is not None else str(uuid.uuid5(uuid.NAMESPACE_URL, "lintaspeta/ruas/" + oid))
         rows.append({
@@ -328,6 +344,7 @@ def main():
             "kode": slug,
             "lokasi_kode": lokasi,
             "unit_kerja_kode": uptd,
+            "uptd_pu": uptd_pu,
             "wil_uptd": wil,
             "kab_kota": kab_raw,
             "KABUPATEN": re.sub(r"^KABUPATEN\b", "KAB.", norm(kab_raw)) if kab_raw else "",

@@ -40,6 +40,7 @@ SCHEMAS = {
             ("status", pa.string(), ("properties", "status")),
             ("lokasi_kode", pa.string(), ("properties", "lokasi_kode")),
             ("unit_kerja_kode", pa.string(), ("properties", "unit_kerja_kode")),
+            ("uptd_pu", pa.string(), ("properties", "uptd_pu")),
             ("kode", pa.string(), ("properties", "kode")),
             ("kelas_jalan", pa.string(), ("properties", "kelas_jalan")),
         ],
@@ -52,11 +53,11 @@ SCHEMAS = {
             ],
             "maps/pengawasan-angkutanbarang/data/ruas_jalan.parquet": [
                 "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
-                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "kelas_jalan",
+                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "uptd_pu", "kelas_jalan",
             ],
             "maps/rambu/data/ruas_jalan.parquet": [
                 "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
-                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "kelas_jalan",
+                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "uptd_pu", "kelas_jalan",
             ],
             "maps/apj/data/ruas_apj.parquet": [
                 "id", "kode", "nama", "panjang_km", "status", "unit_kerja_kode", "lokasi_kode",
