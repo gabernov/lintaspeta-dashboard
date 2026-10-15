@@ -1122,7 +1122,7 @@ body {
   display: flex;
   align-items: center;
   gap: 2px;
-  max-width: calc(100% - 360px);
+  max-width: calc(100% - 740px);
   overflow-x: auto;
   scrollbar-width: none;
   background: var(--glass-soft);
@@ -1511,6 +1511,46 @@ body {
   border: 1px solid var(--border-soft);
   background: var(--glass);
   backdrop-filter: blur(8px);
+}
+.content-search {
+  display: flex;
+  min-width: 0;
+}
+/* Matching the public map, the search floats as a pill at the map's top-right
+   on roomy screens; on narrow or short screens it stays inline in the topbar
+   row, where a floating 340px pill would not fit. */
+@media (min-width: 821px) and (min-height: 561px) {
+  .content-search {
+    position: fixed;
+    top: var(--ed-float-inset);
+    right: var(--ed-float-inset);
+    z-index: 40;
+  }
+  .ed-search {
+    width: 340px;
+    max-width: none;
+    height: 44px;
+    border-radius: 999px;
+  }
+  .ed-search-input {
+    font-size: 13.5px;
+    padding: 0 40px 0 42px;
+  }
+  .ed-search-icon {
+    left: 15px;
+  }
+  .ed-search-clear {
+    right: 12px;
+    width: 22px;
+    height: 22px;
+    font-size: 16px;
+  }
+  .ed-search-menu {
+    width: 100%;
+  }
+  .ed-topright {
+    top: calc(var(--ed-float-gap) + 52px);
+  }
 }
 .ed-search-icon {
   position: absolute;

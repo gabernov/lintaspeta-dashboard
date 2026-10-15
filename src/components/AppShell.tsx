@@ -180,7 +180,9 @@ export default function AppShell() {
             </svg>
           </button>
           <BasemapPicker />
-          <EditorSearch />
+          <div className="content-search">
+            <EditorSearch />
+          </div>
           <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
             {theme === "dark" ? (
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
