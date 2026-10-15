@@ -79,6 +79,59 @@ def norm(value):
     return " ".join(text.split())
 
 
+def squash(value):
+    return re.sub(r"[^a-z0-9]", "", (value or "").lower())
+
+
+def tidy_name(value):
+    if not value:
+        return ""
+    text = re.sub(r"\s+", " ", value).strip()
+    text = re.sub(r"\s+\)", ")", text)
+    text = re.sub(r"\(\s+", "(", text)
+    text = re.sub(r"(\S)-(\s)", r"\1 - ", text)
+    text = re.sub(r"(\s)-(\S)", r" - \2", text)
+    text = text.replace("INDRMAYU", "INDRAMAYU")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def merge_word_boundaries(pu, sk):
+    if not pu or not sk:
+        return pu
+    pu_positions = [i for i, ch in enumerate(pu) if ch.isalnum()]
+    pu_alnum = [ch for ch in pu.lower() if ch.isalnum()]
+    sk_alnum = [ch for ch in sk.lower() if ch.isalnum()]
+    if pu_alnum != sk_alnum:
+        return pu
+    boundaries = []
+    count = 0
+    tokens = sk.split()
+    for token in tokens:
+        count += len([ch for ch in token if ch.isalnum()])
+        boundaries.append(count)
+    boundaries = boundaries[:-1]
+    inserts = set()
+    for boundary in boundaries:
+        if boundary <= 0 or boundary >= len(pu_positions):
+            continue
+        prev = pu_positions[boundary - 1]
+        nxt = pu_positions[boundary]
+        if pu[prev + 1:nxt] != "":
+            continue
+        inserts.add(nxt)
+    if not inserts:
+        return pu
+    all_caps = pu.isupper()
+    out = []
+    for idx, ch in enumerate(pu):
+        if idx in inserts:
+            out.append(" ")
+            if not all_caps and ch.islower():
+                ch = ch.upper()
+        out.append(ch)
+    return "".join(out)
+
+
 def code_candidates(kode):
     base = str(kode).replace("22.00.", "")
     parts = base.split(".")
@@ -334,12 +387,18 @@ def main():
 
         uptd = DISHUB_UPTD_BY_SLUG.get(slug, "")
 
+        nama_pu = nama
+        nama_sk = str(old["nama"]) if old is not None and old.get("nama") else ""
+        nama = merge_word_boundaries(tidy_name(nama_pu), nama_sk)
+
         row_id = str(old["id"]) if old is not None else str(uuid.uuid5(uuid.NAMESPACE_URL, "lintaspeta/ruas/" + oid))
         rows.append({
             "id": row_id,
             "kode_number": kode or "",
             "id_ruas_jalan": oid,
             "nama": nama,
+            "nama_pu": nama_pu,
+            "nama_sk": nama_sk,
             "nama_lama": str(old["nama"]) if old is not None else "",
             "kode": slug,
             "lokasi_kode": lokasi,

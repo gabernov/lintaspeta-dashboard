@@ -9,7 +9,7 @@ from psycopg2.extras import execute_values
 ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.local")
 
 PROPERTY_KEYS = [
-    "id", "kode_number", "id_ruas_jalan", "nama", "nama_lama", "kode", "lokasi_kode",
+    "id", "kode_number", "id_ruas_jalan", "nama", "nama_pu", "nama_sk", "nama_lama", "kode", "lokasi_kode",
     "unit_kerja_kode", "uptd_pu", "wil_uptd", "kab_kota", "KABUPATEN", "nm_sppjj", "sta_awal",
     "sta_akhir", "panjang_km", "panjang_km_lama", "status", "kelas_jalan", "legacy_match",
 ]

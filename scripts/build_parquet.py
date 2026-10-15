@@ -35,6 +35,8 @@ SCHEMAS = {
             ("kode_number", pa.string(), ("properties", "kode_number")),
             ("id_ruas_jalan", pa.string(), ("properties", "id_ruas_jalan")),
             ("nama", pa.string(), ("properties", "nama")),
+            ("nama_pu", pa.string(), ("properties", "nama_pu")),
+            ("nama_sk", pa.string(), ("properties", "nama_sk")),
             ("nama_lama", pa.string(), ("properties", "nama_lama")),
             ("panjang_km", pa.float64(), ("properties", "panjang_km")),
             ("status", pa.string(), ("properties", "status")),
@@ -48,15 +50,15 @@ SCHEMAS = {
         "file": "maps/ruas-jalan/data/ruas_jalan.parquet",
         "copies": {
             "maps/sekolah/data/ruas_jalan.parquet": [
-                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_pu", "nama_sk", "nama_lama",
                 "lokasi_kode", "panjang_km", "status", "unit_kerja_kode",
             ],
             "maps/pengawasan-angkutanbarang/data/ruas_jalan.parquet": [
-                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_pu", "nama_sk", "nama_lama",
                 "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "uptd_pu", "kelas_jalan",
             ],
             "maps/rambu/data/ruas_jalan.parquet": [
-                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_pu", "nama_sk", "nama_lama",
                 "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "uptd_pu", "kelas_jalan",
             ],
             "maps/apj/data/ruas_apj.parquet": [
