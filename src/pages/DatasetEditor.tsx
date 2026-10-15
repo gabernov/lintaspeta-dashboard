@@ -7,7 +7,13 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
-import { JENIS_ICON_IDS, KELAS_ICON_IDS, ensurePointIcons, jenisLabel } from "../lib/pointIcons";
+import {
+  JENIS_ICON_IDS,
+  KELAS_ICON_IDS,
+  MST_ICON_IDS,
+  ensurePointIcons,
+  jenisLabel,
+} from "../lib/pointIcons";
 import { ED_THEME_EVENT, getCurrentTheme, type ThemeMode } from "../lib/theme";
 import { useAuth } from "../auth/AuthContext";
 import AttributeForm from "../components/editor/AttributeForm";
@@ -306,12 +312,20 @@ function addPointDraftLayers(
             KELAS_ICON_IDS["I"],
           ],
           [
-            "match", ["get", "jenis"],
-            "rambu_mst", JENIS_ICON_IDS["rambu_mst"],
-            "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
-            "tambang", JENIS_ICON_IDS["tambang"],
-            "posko", JENIS_ICON_IDS["posko"],
-            JENIS_ICON_IDS["rambu_kelas_jalan"],
+            "case",
+            ["==", ["get", "jenis"], "rambu_mst"],
+            [
+              "match", ["get", "kelas_jalan"],
+              "I", MST_ICON_IDS["10"],
+              MST_ICON_IDS["8"],
+            ],
+            [
+              "match", ["get", "jenis"],
+              "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
+              "tambang", JENIS_ICON_IDS["tambang"],
+              "posko", JENIS_ICON_IDS["posko"],
+              JENIS_ICON_IDS["rambu_kelas_jalan"],
+            ],
           ],
         ],
         "icon-size": [
@@ -1396,12 +1410,20 @@ export default function DatasetEditor() {
                 KELAS_ICON_IDS["I"],
               ],
               [
-                "match", ["get", "jenis"],
-                "rambu_mst", JENIS_ICON_IDS["rambu_mst"],
-                "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
-                "tambang", JENIS_ICON_IDS["tambang"],
-                "posko", JENIS_ICON_IDS["posko"],
-                JENIS_ICON_IDS["rambu_kelas_jalan"],
+                "case",
+                ["==", ["get", "jenis"], "rambu_mst"],
+                [
+                  "match", ["get", "kelas_jalan"],
+                  "I", MST_ICON_IDS["10"],
+                  MST_ICON_IDS["8"],
+                ],
+                [
+                  "match", ["get", "jenis"],
+                  "rambu_pembatasan", JENIS_ICON_IDS["rambu_pembatasan"],
+                  "tambang", JENIS_ICON_IDS["tambang"],
+                  "posko", JENIS_ICON_IDS["posko"],
+                  JENIS_ICON_IDS["rambu_kelas_jalan"],
+                ],
               ],
             ],
             "icon-size": [
