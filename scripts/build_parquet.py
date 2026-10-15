@@ -17,6 +17,7 @@ import argparse
 import io
 import json
 import os
+import struct
 import sys
 import urllib.request
 
@@ -32,15 +33,35 @@ SCHEMAS = {
         "columns": [
             ("id", pa.string(), ("properties", "id")),
             ("kode_number", pa.string(), ("properties", "kode_number")),
+            ("id_ruas_jalan", pa.string(), ("properties", "id_ruas_jalan")),
             ("nama", pa.string(), ("properties", "nama")),
+            ("nama_lama", pa.string(), ("properties", "nama_lama")),
             ("panjang_km", pa.float64(), ("properties", "panjang_km")),
             ("status", pa.string(), ("properties", "status")),
             ("lokasi_kode", pa.string(), ("properties", "lokasi_kode")),
             ("unit_kerja_kode", pa.string(), ("properties", "unit_kerja_kode")),
             ("kode", pa.string(), ("properties", "kode")),
+            ("kelas_jalan", pa.string(), ("properties", "kelas_jalan")),
         ],
         "geometry_type": "MultiLineString",
         "file": "maps/ruas-jalan/data/ruas_jalan.parquet",
+        "copies": {
+            "maps/sekolah/data/ruas_jalan.parquet": [
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode",
+            ],
+            "maps/pengawasan-angkutanbarang/data/ruas_jalan.parquet": [
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "kelas_jalan",
+            ],
+            "maps/rambu/data/ruas_jalan.parquet": [
+                "id", "kode", "kode_number", "id_ruas_jalan", "nama", "nama_lama",
+                "lokasi_kode", "panjang_km", "status", "unit_kerja_kode", "kelas_jalan",
+            ],
+            "maps/apj/data/ruas_apj.parquet": [
+                "id", "kode", "nama", "panjang_km", "status", "unit_kerja_kode", "lokasi_kode",
+            ],
+        },
     },
     "sekolah": {
         "columns": [
@@ -189,10 +210,41 @@ def hex_to_wkb(hex_str: str | None) -> bytes | None:
     return bytes.fromhex(hex_str)
 
 
-def build_table(dataset: str, rows: list[dict]):
+def linestring_wkb(ring: list) -> bytes:
+    return b"\x01" + struct.pack("<II", 2, len(ring)) + b"".join(
+        struct.pack("<dd", point[0], point[1]) for point in ring
+    )
+
+
+def geojson_to_wkb(geom: dict | None) -> bytes | None:
+    if not geom:
+        return None
+    gtype = geom.get("type")
+    coords = geom.get("coordinates") or []
+    if gtype == "MultiLineString":
+        parts = [linestring_wkb(ring) for ring in coords]
+        return b"\x01" + struct.pack("<II", 5, len(parts)) + b"".join(parts)
+    if gtype == "LineString":
+        return b"\x01" + struct.pack("<II", 5, 1) + linestring_wkb(coords)
+    raise ValueError(f"unsupported geometry type: {gtype}")
+
+
+def geometry_to_wkb(value) -> bytes | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return geojson_to_wkb(value)
+    return hex_to_wkb(value)
+
+
+def build_table(dataset: str, rows: list[dict], columns: list[str] | None = None):
     spec = SCHEMAS[dataset]
+    selected = [c for c in spec["columns"] if columns is None or c[0] in columns]
+    if columns is not None:
+        order = {name: idx for idx, name in enumerate(columns)}
+        selected.sort(key=lambda c: order[c[0]])
     arrays: list[list] = []
-    for col_name, pa_type, path in spec["columns"]:
+    for col_name, pa_type, path in selected:
         values = []
         for row in rows:
             node = row
@@ -220,14 +272,14 @@ def build_table(dataset: str, rows: list[dict]):
     # Geometry column: EWKB hex -> binary
     geoms = []
     for row in rows:
-        geoms.append(hex_to_wkb(row.get("geometry")))
+        geoms.append(geometry_to_wkb(row.get("geometry")))
 
     cols = [
         pa.array(values, type=pa_type)
-        for (_, pa_type, _), values in zip(spec["columns"], arrays)
+        for (_, pa_type, _), values in zip(selected, arrays)
     ]
     cols.append(pa.array(geoms, type=pa.binary()))
-    names = [c[0] for c in spec["columns"]] + ["geometry"]
+    names = [c[0] for c in selected] + ["geometry"]
     return pa.table(cols, names=names)
 
 
@@ -258,6 +310,11 @@ def main():
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         pq.write_table(table, out_path)
         print(f"  wrote {out_path} ({len(rows)} rows)")
+        for rel, columns in (SCHEMAS[dataset].get("copies") or {}).items():
+            copy_path = os.path.join(args.portal, rel)
+            os.makedirs(os.path.dirname(copy_path), exist_ok=True)
+            pq.write_table(build_table(dataset, rows, columns), copy_path)
+            print(f"  wrote {copy_path} ({len(rows)} rows)")
 
 
 if __name__ == "__main__":

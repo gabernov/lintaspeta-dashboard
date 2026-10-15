@@ -380,6 +380,10 @@ const UPTD_MAP: Record<string, string> = {
   "UPTD-II": "UPTD-II",
   "UPTD-III": "UPTD-III",
   "UPTD-IV": "UPTD-IV",
+  "UPTD 5": "UPTD-V",
+  "UPTD 6": "UPTD-VI",
+  "UPTD-V": "UPTD-V",
+  "UPTD-VI": "UPTD-VI",
 };
 
 function DistributionTable({
@@ -403,7 +407,7 @@ function DistributionTable({
     if (k === "Rusak Ringan" || k === "Rusak") return { color: "var(--warn)" };
     return { color: "var(--danger)" };
   };
-  const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
+  const uptdOrder = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV", "UPTD-V", "UPTD-VI"];
 
   if (tab === "kondisi") {
     const rows = kondisi;

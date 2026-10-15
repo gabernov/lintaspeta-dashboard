@@ -8,12 +8,14 @@ export const DATASETS: DatasetMeta[] = [
     draftTable: "ruas_jalan_draft",
     publishedTable: "ruas_jalan_published",
     geometryType: "LineString",
-    regionField: "region", // populated from unit_kerja_kode (UPTD-I..IV)
+    regionField: "region", // populated from unit_kerja_kode (UPTD-I..VI)
     regionLabel: "UPTD",
     sourceIdLabel: "ID Ruas",
     formFields: [
       { key: "nama", label: "Nama Ruas", type: "text" },
       { key: "kode_number", label: "Kode Number", type: "text" },
+      { key: "id_ruas_jalan", label: "Kode Resmi", type: "text" },
+      { key: "nama_lama", label: "Nama Lama", type: "text" },
       { key: "kode", label: "Kode Kab/Kota", type: "text" },
       { key: "panjang_km", label: "Panjang (km)", type: "number" },
       { key: "status", label: "Status", type: "text" },

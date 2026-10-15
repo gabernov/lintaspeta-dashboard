@@ -39,3 +39,6 @@ backups/
 
 # Cloudflare token drop-file for scripts/set-cf-token.sh (never commit)
 cf-token.txt
+
+# Importer download cache (scripts/import_ruas_propinsi.py)
+scripts/.cache/
