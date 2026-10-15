@@ -63,6 +63,9 @@ jobs:
             git push origin main
           fi
 
+      - name: Version portal assets (cache-bust)
+        run: node scripts/stamp_portal_assets.mjs portal ${{ github.sha }}
+
       - name: Deploy portal to Cloudflare Pages
         working-directory: portal
         env:
