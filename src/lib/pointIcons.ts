@@ -9,7 +9,8 @@ import type { Map as MapLibreMap, StyleImageSource } from "maplibre-gl";
  * white badge carrying their illustration.
  */
 
-const ICON_SIZE = 40;
+const ICON_UNITS = 40;
+const ICON_SIZE = 64;
 const SIGN_RED = "#EF4444";
 const INK = "#111827";
 const OUTLINE = "#0F172A";
@@ -298,7 +299,9 @@ function toImage(ctx: CanvasRenderingContext2D): StyleImageSource {
 function buildJenisIcon(jenis: string, kelas: string): StyleImageSource | null {
   const ctx = newContext();
   if (!ctx) return null;
-  const S = ICON_SIZE;
+  const S = ICON_UNITS;
+  const k = ICON_SIZE / ICON_UNITS;
+  ctx.scale(k, k);
   if (SIGN_JENIS.has(jenis)) signBase(ctx, S);
   else badgeBase(ctx, S);
   ctx.save();
