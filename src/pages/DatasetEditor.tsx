@@ -7,6 +7,9 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
+import { fetchOsmGeometry, onSearchSelection, setSharedRoads } from "../lib/editorSearch";
+import { ROAD_UPTD, ROAD_UPTD_FALLBACK, UPTD_COLORS, type RoadItem } from "../lib/roadUptd";
+import LayersPanel from "../components/editor/LayersPanel";
 import {
   JENIS_ICON_IDS,
   KELAS_ICON_IDS,
@@ -29,15 +32,6 @@ import type {
 
 /* Basemap catalog lives in lib/basemaps.ts — picked from the topbar
    dropdown and applied here via the ed-basemap window event. */
-
-const ROAD_UPTD = ["UPTD-I", "UPTD-II", "UPTD-III", "UPTD-IV"];
-const UPTD_COLORS: Record<string, string> = {
-  "UPTD-I": "#E11D48",
-  "UPTD-II": "#2563EB",
-  "UPTD-III": "#059669",
-  "UPTD-IV": "#7C3AED",
-};
-const ROAD_UPTD_FALLBACK = "#94A3B8";
 
 /* Squared distance from point to a lng/lat vertex array — good enough
    for nearest-ruas ranking at province scale. */
@@ -450,6 +444,11 @@ export default function DatasetEditor() {
   const [roadInfo, setRoadInfo] = useState<Feature | null>(null);
   const [activeRoadUPTD, setActiveRoadUPTD] = useState<string[]>(() => [...ROAD_UPTD]);
   const roadUPTDRef = useRef<string[]>([...ROAD_UPTD]);
+  const [hiddenRoads, setHiddenRoads] = useState<string[]>([]);
+  const hiddenRoadsRef = useRef<string[]>([]);
+  const [roadList, setRoadList] = useState<RoadItem[]>([]);
+  const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const searchGeomAbortRef = useRef<AbortController | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -462,6 +461,8 @@ export default function DatasetEditor() {
 
   const DRAFT_LAYERS = [
     "draft-points",
+    "draft-point-icons",
+    "draft-pending-icons",
     "draft-lines",
     "draft-clusters",
     "draft-cluster-labels",
@@ -728,10 +729,16 @@ export default function DatasetEditor() {
       ROAD_UPTD_FALLBACK,
     ]);
     const sel = roadUPTDRef.current;
+    const clauses: maplibregl.FilterSpecification[] = [];
+    if (sel.length < ROAD_UPTD.length) {
+      clauses.push(["in", ["get", "unit_kerja_kode"], ["literal", sel]] as maplibregl.FilterSpecification);
+    }
+    const hidden = hiddenRoadsRef.current;
+    if (hidden.length) {
+      clauses.push(["!", ["in", ["get", "id_ruas_jalan"], ["literal", hidden]]] as maplibregl.FilterSpecification);
+    }
     const filter: maplibregl.FilterSpecification | null =
-      sel.length >= ROAD_UPTD.length
-        ? null
-        : (["in", ["get", "unit_kerja_kode"], ["literal", sel]] as maplibregl.FilterSpecification);
+      clauses.length === 0 ? null : clauses.length === 1 ? clauses[0] : (["all", ...clauses] as maplibregl.FilterSpecification);
     ROAD_LAYERS.forEach((id) => {
       if (map.getLayer(id)) map.setFilter(id, filter);
     });
@@ -759,6 +766,30 @@ export default function DatasetEditor() {
     applyRoadStyle();
     applyLayers();
   }, [activeRoadUPTD, applyRoadStyle, applyLayers]);
+
+  const toggleRoadVisibility = useCallback((ruasId: string) => {
+    setHiddenRoads((prev) =>
+      prev.includes(ruasId) ? prev.filter((id) => id !== ruasId) : [...prev, ruasId]
+    );
+  }, []);
+
+  const setManyRoadsVisible = useCallback((ids: string[], visible: boolean) => {
+    setHiddenRoads((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (visible) next.delete(id);
+        else next.add(id);
+      }
+      return [...next];
+    });
+  }, []);
+
+  const showAllRoads = useCallback(() => setHiddenRoads([]), []);
+
+  useEffect(() => {
+    hiddenRoadsRef.current = hiddenRoads;
+    applyRoadStyle();
+  }, [hiddenRoads, applyRoadStyle]);
 
   const handleSave = useCallback(
     async (values: GeoProps) => {
@@ -1300,6 +1331,22 @@ export default function DatasetEditor() {
           .then(({ data }) => {
             if (!data) return;
             roadsBgRef.current = data as FeatureCollection;
+            setSharedRoads(data as FeatureCollection);
+            const fc = data as FeatureCollection;
+            setRoadList(
+              fc.features
+                .map((f) => {
+                  const p = (f.properties ?? {}) as Record<string, unknown>;
+                  return {
+                    id: String(p.id_ruas_jalan ?? p._source_id ?? ""),
+                    nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
+                    kode: String(p.kode_number ?? ""),
+                    uptd: String(p.unit_kerja_kode ?? ""),
+                  };
+                })
+                .filter((r) => r.id)
+                .sort((a, b) => a.nama.localeCompare(b.nama, "id"))
+            );
             const src = map.getSource("roads-bg");
             if (src && "setData" in src) {
               (src as maplibregl.GeoJSONSource).setData(
@@ -1770,6 +1817,116 @@ export default function DatasetEditor() {
     return () => {
       window.removeEventListener(ED_BASEMAP_EVENT, onPick);
       window.removeEventListener(ED_THEME_EVENT, onTheme);
+    };
+  }, []);
+
+  useEffect(() => {
+    const clearSearchMarker = () => {
+      searchMarkerRef.current?.remove();
+      searchMarkerRef.current = null;
+    };
+
+    const clearSearchGeometry = () => {
+      const map = mapRef.current;
+      if (!map) return;
+      for (const id of ["search-hl-fill", "search-hl-line", "search-hl-glow"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      if (map.getSource("search-hl")) map.removeSource("search-hl");
+    };
+
+    const off = onSearchSelection((sel) => {
+      const map = mapRef.current;
+      if (!map) return;
+      clearSearchMarker();
+      clearSearchGeometry();
+      searchGeomAbortRef.current?.abort();
+
+      if (sel.kind === "coord") {
+        const el = document.createElement("div");
+        el.className = "ed-search-marker";
+        searchMarkerRef.current = new maplibregl.Marker({ element: el })
+          .setLngLat([sel.lng, sel.lat])
+          .addTo(map);
+        map.flyTo({ center: [sel.lng, sel.lat], zoom: Math.max(map.getZoom(), 15), duration: 700, essential: true });
+        return;
+      }
+
+      if (sel.kind === "road") {
+        const fc = roadsBgRef.current;
+        const feature = fc?.features.find((f) => {
+          const p = (f.properties ?? {}) as Record<string, unknown>;
+          return (
+            (sel.ruasId && String(p.id_ruas_jalan ?? "") === sel.ruasId) ||
+            (sel.kode && String(p.kode_number ?? "") === sel.kode)
+          );
+        });
+        if (!feature) return;
+        const src = map.getSource("roads-selected") as maplibregl.GeoJSONSource | undefined;
+        src?.setData({ type: "FeatureCollection", features: [feature] });
+        const bounds = computeBBox({ type: "FeatureCollection", features: [feature] });
+        if (bounds) {
+          map.fitBounds(
+            [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+            { padding: 80, maxZoom: 15, duration: 800 }
+          );
+        }
+        return;
+      }
+
+      const controller = new AbortController();
+      searchGeomAbortRef.current = controller;
+      if (sel.bbox) {
+        map.fitBounds(
+          [[sel.bbox[0], sel.bbox[1]], [sel.bbox[2], sel.bbox[3]]],
+          { padding: 60, maxZoom: 15, duration: 800 }
+        );
+      } else {
+        map.flyTo({ center: [sel.lng, sel.lat], zoom: 14, duration: 800, essential: true });
+      }
+      const el = document.createElement("div");
+      el.className = "ed-search-marker is-place";
+      searchMarkerRef.current = new maplibregl.Marker({ element: el })
+        .setLngLat([sel.lng, sel.lat])
+        .addTo(map);
+
+      if (sel.osmType && sel.osmId != null) {
+        void fetchOsmGeometry(sel.osmType, sel.osmId, controller.signal)
+          .then((geometry) => {
+            if (controller.signal.aborted || !geometry) return;
+            const current = mapRef.current;
+            if (!current) return;
+            current.addSource("search-hl", { type: "geojson", data: geometry });
+            const type = (geometry.features[0]?.geometry as { type?: string } | undefined)?.type ?? "";
+            if (type === "Polygon" || type === "MultiPolygon") {
+              current.addLayer({
+                id: "search-hl-fill", type: "fill", source: "search-hl",
+                paint: { "fill-color": "#2563EB", "fill-opacity": 0.12, "fill-outline-color": "#2563EB" },
+              });
+              current.addLayer({
+                id: "search-hl-line", type: "line", source: "search-hl",
+                paint: { "line-color": "#2563EB", "line-width": 2, "line-opacity": 0.9 },
+              });
+            } else {
+              current.addLayer({
+                id: "search-hl-glow", type: "line", source: "search-hl",
+                paint: { "line-color": "#2563EB", "line-width": 8, "line-opacity": 0.25 },
+              });
+              current.addLayer({
+                id: "search-hl-line", type: "line", source: "search-hl",
+                paint: { "line-color": "#2563EB", "line-width": 3, "line-opacity": 0.9 },
+              });
+            }
+          })
+          .catch(() => undefined);
+      }
+    });
+
+    return () => {
+      off();
+      searchGeomAbortRef.current?.abort();
+      clearSearchMarker();
+      clearSearchGeometry();
     };
   }, []);
 
@@ -2743,76 +2900,26 @@ export default function DatasetEditor() {
             )}
           </div>
 
-          {/* ---- Layers (bottom-left) ---- */}
-          <div className="ed-layers">
-            {layersOpen && (
-              <div className="ed-layers-card" role="dialog" aria-label="Tampilkan lapisan">
-                <div className="ed-layers-title">Tampilkan Lapisan</div>
-                <div className="ed-layers-name">{meta.label}</div>
-                <button
-                  type="button"
-                  className={`ed-layer-row${featuresVisible ? " on" : ""}`}
-                  onClick={() => setFeaturesVisible((v) => !v)}
-                  aria-pressed={featuresVisible}
-                >
-                  <span
-                    className={`ed-layer-swatch${isPoint ? " is-dot" : " is-line"}`}
-                    style={{ background: meta.defaultColor }}
-                  />
-                  <span className="ed-layer-label">Fitur</span>
-                  <span className="ed-layer-state">{featuresVisible ? "On" : "Off"}</span>
-                </button>
-                {datasetId !== "ruas_jalan" && (
-                  <>
-                    <button
-                      type="button"
-                      className={`ed-layer-row${roadsVisible ? " on" : ""}`}
-                      onClick={() => setRoadsVisible((v) => !v)}
-                      aria-pressed={roadsVisible}
-                    >
-                      <span className="ed-layer-swatch is-line" style={{ background: "#cbd5e1" }} />
-                      <span className="ed-layer-label">Ruas jalan (referensi)</span>
-                      <span className="ed-layer-state">{roadsVisible ? "On" : "Off"}</span>
-                    </button>
-                    <div className="ed-layer-sub">
-                      {ROAD_UPTD.map((code) => {
-                        const on = activeRoadUPTD.includes(code);
-                        return (
-                          <button
-                            key={code}
-                            type="button"
-                            className={`ed-layer-row ed-layer-row-sub${on ? " on" : ""}`}
-                            onClick={() => toggleRoadUPTD(code)}
-                            aria-pressed={on}
-                          >
-                            <span
-                              className="ed-layer-swatch is-line"
-                              style={{ background: UPTD_COLORS[code] }}
-                            />
-                            <span className="ed-layer-label">{code.replace("UPTD-", "UPTD ")}</span>
-                            <span className="ed-layer-state">{on ? "On" : "Off"}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              className={`ed-layers-btn${layersOpen ? " on" : ""}`}
-              onClick={() => setLayersOpen((v) => !v)}
-              aria-expanded={layersOpen}
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                <polyline points="2 17 12 22 22 17" />
-                <polyline points="2 12 12 17 22 12" />
-              </svg>
-              <span>Lapisan</span>
-            </button>
-          </div>
+          {/**/}
+          <LayersPanel
+            label={meta.label}
+            isPoint={isPoint}
+            defaultColor={meta.defaultColor}
+            showRoads={datasetId !== "ruas_jalan"}
+            open={layersOpen}
+            onToggleOpen={() => setLayersOpen((v) => !v)}
+            featuresVisible={featuresVisible}
+            onToggleFeatures={() => setFeaturesVisible((v) => !v)}
+            roadsVisible={roadsVisible}
+            onToggleRoads={() => setRoadsVisible((v) => !v)}
+            roadUPTD={activeRoadUPTD}
+            onToggleUPTD={toggleRoadUPTD}
+            roadList={roadList}
+            hiddenRoads={hiddenRoads}
+            onToggleRoad={toggleRoadVisibility}
+            onSetManyRoads={setManyRoadsVisible}
+            onShowAllRoads={showAllRoads}
+          />
 
           {/* ---- Marquee overlay (select tool) ---- */}
           {activeTool === "select" && marquee && (

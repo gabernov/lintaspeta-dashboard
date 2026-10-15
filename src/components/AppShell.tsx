@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { DATASETS } from "../lib/datasets";
 import { applySystemTheme, applyTheme, getInitialTheme, isSystemMode, type ThemeMode } from "../lib/theme";
 import BasemapPicker from "./BasemapPicker";
+import EditorSearch from "./editor/EditorSearch";
 
 function initials(name: string | null | undefined) {
   if (!name) return "·";
@@ -179,6 +180,7 @@ export default function AppShell() {
             </svg>
           </button>
           <BasemapPicker />
+          <EditorSearch />
           <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
             {theme === "dark" ? (
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

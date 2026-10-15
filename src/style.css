@@ -1291,11 +1291,13 @@ body {
 .ed-layers-btn:hover { color: var(--text); }
 .ed-layers-btn.on { color: var(--text); border-color: var(--accent-tint-strong); }
 .ed-layers-card {
-  width: 248px;
+  width: 262px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px;
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
   border-radius: 12px;
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
@@ -1359,6 +1361,290 @@ body {
 }
 .ed-layer-row-sub {
   padding: 6px 8px;
+}
+
+.ed-layer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ed-layer-group-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ed-layer-group-head .ed-layer-row {
+  flex: 1;
+  min-width: 0;
+}
+.ed-layer-expand {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.12s, color 0.12s;
+}
+.ed-layer-expand:hover {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text);
+}
+.ed-layer-expand.on {
+  transform: rotate(180deg);
+  color: var(--accent-soft);
+}
+
+.ed-road-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 6px 12px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-soft-3);
+  max-height: 216px;
+  overflow-y: auto;
+}
+.ed-road-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+.ed-road-search:focus {
+  outline: none;
+  border-color: var(--accent-tint-strong);
+}
+.ed-road-actions {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 2px;
+}
+.ed-road-actions button {
+  flex: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-soft);
+  background: var(--glass);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ed-road-actions button:hover {
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+.ed-road-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.ed-road-row:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+.ed-road-row.on {
+  opacity: 1;
+  color: var(--text);
+}
+.ed-road-check {
+  width: 13px;
+  flex-shrink: 0;
+  color: var(--ok-soft);
+  font-weight: 700;
+}
+.ed-road-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-road-empty {
+  padding: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ed-road-reset {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px dashed var(--border-soft-3);
+  background: transparent;
+  color: var(--accent-soft);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ed-road-reset:hover {
+  background: var(--accent-tint);
+}
+
+.ed-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 300px;
+  max-width: 42vw;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--glass);
+  backdrop-filter: blur(8px);
+}
+.ed-search-icon {
+  position: absolute;
+  left: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.ed-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 28px 0 30px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+.ed-search-input:focus {
+  outline: none;
+}
+.ed-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ed-search-clear:hover {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--text);
+}
+.ed-search-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 340px;
+  max-width: 80vw;
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--glass-panel);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  z-index: 50;
+}
+.ed-search-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.ed-search-count {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ed-search-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-search-item:hover,
+.ed-search-item.active {
+  background: var(--accent-tint);
+}
+.ed-search-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ed-search-meta {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-search-chip {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  font-size: 9px;
+  font-weight: 700;
+}
+.ed-search-note {
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ed-search-attr {
+  padding-top: 2px;
+  font-size: 10px;
+  text-align: right;
+}
+.ed-search-marker {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.45);
+}
+.ed-search-marker.is-place {
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
 }
 
 /* Autofill hint (nearest-ruas prefill) */
