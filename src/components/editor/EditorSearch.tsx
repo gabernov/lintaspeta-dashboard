@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import {
   GEO_ATTRIBUTION,
@@ -22,7 +22,12 @@ type Results = {
 
 const EMPTY: Results = { coord: null, places: [], roads: [], roadTotal: 0, loading: false };
 
-export default function EditorSearch() {
+type Props = {
+  leading?: ReactNode;
+  trailing?: ReactNode;
+};
+
+export default function EditorSearch({ leading, trailing }: Props) {
   const location = useLocation();
   const isMapRoute = location.pathname.includes("/dataset/");
   const [query, setQuery] = useState("");
@@ -141,13 +146,15 @@ export default function EditorSearch() {
   const rowClass = (i: number) => `ed-search-item${i === active ? " active" : ""}`;
 
   return (
-    <div className="ed-search" ref={wrapRef}>
-      <span className="ed-search-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-3.5-3.5" />
-        </svg>
-      </span>
+    <div className={`ed-search${leading ? " has-lead" : ""}${trailing ? " has-trail" : ""}`} ref={wrapRef}>
+      {leading ?? (
+        <span className="ed-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        </span>
+      )}
       <input
         ref={inputRef}
         type="text"
@@ -165,7 +172,7 @@ export default function EditorSearch() {
       {query && (
         <button
           type="button"
-          className="ed-search-clear"
+          className={`ed-search-clear${trailing ? " inline" : ""}`}
           aria-label="Bersihkan pencarian"
           onClick={() => {
             setQuery("");
@@ -177,6 +184,7 @@ export default function EditorSearch() {
           ×
         </button>
       )}
+      {trailing}
 
       {open && (
         <div className="ed-search-menu" role="listbox">

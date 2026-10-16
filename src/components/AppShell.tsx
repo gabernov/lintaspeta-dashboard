@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DATASETS } from "../lib/datasets";
 import { applySystemTheme, applyTheme, getInitialTheme, isSystemMode, type ThemeMode } from "../lib/theme";
-import BasemapPicker from "./BasemapPicker";
 import EditorSearch from "./editor/EditorSearch";
+import { useEditorChrome } from "../lib/editorChrome";
 
 function initials(name: string | null | undefined) {
   if (!name) return "·";
@@ -25,6 +25,12 @@ export default function AppShell() {
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia("(max-width: 820px)").matches
   );
+  // Compact (phone) chrome: the topbar controls move into the search pill and
+  // the sidebar drawer, so the map keeps a single row of chrome at the top.
+  const [isCompact, setIsCompact] = useState(
+    () => window.matchMedia("(max-width: 600px)").matches
+  );
+  const chrome = useEditorChrome();
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 820px)");
@@ -32,6 +38,13 @@ export default function AppShell() {
       setIsMobile(e.matches);
       if (!e.matches) setMobileNavOpen(false);
     };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 600px)");
+    const onChange = (e: MediaQueryListEvent) => setIsCompact(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -80,6 +93,34 @@ export default function AppShell() {
     await signOut();
     navigate("/login", { replace: true });
   };
+
+  // Rendered in the topbar normally, and in the drawer on phones.
+  const themeToggleButton = (
+    <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
+      {theme === "dark" ? (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      )}
+    </button>
+  );
+
+  const sidebarToggleButton = (
+    <button className="sidebar-toggle" onClick={handleToggleSidebar} title={drawerOpen ? "Tutup menu" : "Buka menu"} aria-label={drawerOpen ? "Tutup menu" : "Buka menu"} aria-expanded={drawerOpen}>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {drawerOpen ? (
+          <polyline points="15 18 9 12 15 6" />
+        ) : (
+          <polyline points="9 18 15 12 9 6" />
+        )}
+      </svg>
+    </button>
+  );
 
   return (
     <div
@@ -138,6 +179,46 @@ export default function AppShell() {
             )}
           </nav>
 
+          {isCompact && (
+            <div className="sidebar-editor">
+              <div className="sidebar-editor-row">{themeToggleButton}</div>
+              {chrome.mounted && (
+                <div className="sidebar-status">
+                  <div className="sidebar-status-row">
+                    <span className="ed-live-dot" />
+                    <span>{chrome.onlineCount} online</span>
+                  </div>
+                  <div className="sidebar-status-row">
+                    <span className={chrome.editOpen ? "ed-chip-open" : "ed-chip-closed"}>
+                      {chrome.editOpen ? "Edit terbuka" : "Edit tertutup"}
+                    </span>
+                    {chrome.canToggleWindow && (
+                      <button
+                        type="button"
+                        className={`ed-window-btn ${chrome.editOpen ? "ed-window-btn-close" : "ed-window-btn-open"}`}
+                        onClick={chrome.actions.toggleWindow}
+                      >
+                        {chrome.editOpen ? "Tutup" : "Buka"}
+                      </button>
+                    )}
+                  </div>
+                  {chrome.autoPublishLabel && (
+                    <button
+                      type="button"
+                      className={`ed-popover-toggle${chrome.autoPublishActive ? " on" : ""}`}
+                      onClick={chrome.actions.toggleAutoPublish}
+                    >
+                      <span className="ed-action-label">{chrome.autoPublishLabel}</span>
+                      <span className={`ed-action-state${chrome.autoPublishActive ? " on" : ""}`}>
+                        {chrome.autoPublishActive ? "ON" : "OFF"}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="sidebar-footer">
             <div className="sidebar-user">
               <div className="sidebar-avatar">{initials(profile?.full_name ?? profile?.id)}</div>
@@ -170,31 +251,35 @@ export default function AppShell() {
 
       <main className="content">
         <div className="content-topbar">
-          <button className="sidebar-toggle" onClick={handleToggleSidebar} title={drawerOpen ? "Tutup menu" : "Buka menu"} aria-label="Toggle sidebar">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              {drawerOpen ? (
-                <polyline points="15 18 9 12 15 6" />
-              ) : (
-                <polyline points="9 18 15 12 9 6" />
-              )}
-            </svg>
-          </button>
-          <BasemapPicker />
+          {!isCompact && sidebarToggleButton}
           <div className="content-search">
-            <EditorSearch />
+            <EditorSearch
+              leading={
+                isCompact ? (
+                  <span className="ed-search-lead">{sidebarToggleButton}</span>
+                ) : undefined
+              }
+              trailing={
+                isCompact && chrome.mounted ? (
+                  <button
+                    type="button"
+                    className="ed-publish ed-search-trail"
+                    onClick={chrome.actions.publish}
+                    disabled={chrome.publishDisabled || chrome.publishBusy}
+                    title={chrome.publishTitle || "Publish"}
+                    aria-label="Publish"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 19V5" />
+                      <path d="M5 12l7-7 7 7" />
+                    </svg>
+                    <span>Publish</span>
+                  </button>
+                ) : undefined
+              }
+            />
           </div>
-          <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
-            {theme === "dark" ? (
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-            )}
-          </button>
+          {!isCompact && themeToggleButton}
         </div>
         <Outlet />
       </main>

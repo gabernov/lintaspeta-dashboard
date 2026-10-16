@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { Fragment, useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { TerraDraw, TerraDrawPointMode, TerraDrawLineStringMode } from "terra-draw";
@@ -7,6 +7,7 @@ import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
+import { resetEditorChrome, setEditorChrome } from "../lib/editorChrome";
 import { fetchOsmGeometry, onSearchSelection, setSharedRoads } from "../lib/editorSearch";
 import { ROAD_UPTD, ROAD_UPTD_FALLBACK, UPTD_COLORS, type RoadItem } from "../lib/roadUptd";
 import LayersPanel from "../components/editor/LayersPanel";
@@ -489,11 +490,10 @@ export default function DatasetEditor() {
   }, [featuresVisible, roadsVisible, applyLayers]);
 
   useEffect(() => {
-    if (!layersOpen && !statusOpen) return;
+    if (!statusOpen) return;
     const onDoc = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (!t.closest(".ed-layers") && !t.closest(".ed-topright") && !t.closest(".ed-addmenu")) {
-        setLayersOpen(false);
+      if (!t.closest(".ed-topright") && !t.closest(".ed-addmenu")) {
         setStatusOpen(false);
         setAddMenuOpen(false);
       }
@@ -510,7 +510,7 @@ export default function DatasetEditor() {
       document.removeEventListener("click", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [layersOpen, statusOpen]);
+  }, [statusOpen]);
 
   /* ---- basemap: stored pick, else the theme's default ---- */
   const basemapIdRef = useRef(
@@ -2783,6 +2783,63 @@ export default function DatasetEditor() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  /* ---- expose the editor's status + Publish to the shell chrome ----
+     On phones the status summary renders in the sidebar drawer and Publish in
+     the search pill, both outside this component's subtree. Handlers are read
+     through a ref so this snapshot only changes when a displayed value does. */
+  const chromeActionsRef = useRef({
+    toggleWindow: () => {},
+    toggleAutoPublish: () => {},
+    publish: () => {},
+  });
+  chromeActionsRef.current = {
+    toggleWindow,
+    toggleAutoPublish: autoBtn?.onClick ?? (() => {}),
+    publish: publishBtn?.onClick ?? (() => {}),
+  };
+
+  const chromeActions = useMemo(
+    () => ({
+      toggleWindow: () => chromeActionsRef.current.toggleWindow(),
+      toggleAutoPublish: () => chromeActionsRef.current.toggleAutoPublish(),
+      publish: () => chromeActionsRef.current.publish(),
+    }),
+    []
+  );
+
+  const chromeEditOpen = !!editWindow?.open;
+  const chromeAutoLabel = autoBtn ? ACTION_LABELS[autoBtn.key] ?? autoBtn.title : null;
+  const chromeAutoActive = !!autoBtn?.active;
+  const chromePublishDisabled = !!publishBtn?.disabled;
+  const chromePublishTitle = publishBtn?.title ?? "";
+
+  useEffect(() => {
+    setEditorChrome({
+      mounted: true,
+      onlineCount,
+      editOpen: chromeEditOpen,
+      canToggleWindow: isSuperAdmin,
+      autoPublishLabel: chromeAutoLabel,
+      autoPublishActive: chromeAutoActive,
+      publishDisabled: chromePublishDisabled,
+      publishTitle: chromePublishTitle,
+      publishBusy: saving,
+      actions: chromeActions,
+    });
+  }, [
+    onlineCount,
+    chromeEditOpen,
+    isSuperAdmin,
+    chromeAutoLabel,
+    chromeAutoActive,
+    chromePublishDisabled,
+    chromePublishTitle,
+    saving,
+    chromeActions,
+  ]);
+
+  useEffect(() => () => resetEditorChrome(), []);
 
   /* ================================================================ */
   /*  RENDER                                                          */

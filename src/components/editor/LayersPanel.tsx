@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ROAD_UPTD, UPTD_COLORS, type RoadItem } from "../../lib/roadUptd";
+import { BASEMAPS, ED_BASEMAP_EVENT, getBasemap } from "../../lib/basemaps";
 
 type Props = {
   label: string;
@@ -42,12 +43,39 @@ export default function LayersPanel({
 }: Props) {
   const [expandedUPTD, setExpandedUPTD] = useState<string | null>(null);
   const [roadQuery, setRoadQuery] = useState("");
+  const [basemap, setBasemap] = useState(() => getBasemap(localStorage.getItem("ed_basemap")));
+
+  useEffect(() => {
+    const onExternal = (e: Event) => {
+      setBasemap(getBasemap((e as CustomEvent<string>).detail));
+    };
+    window.addEventListener(ED_BASEMAP_EVENT, onExternal);
+    return () => window.removeEventListener(ED_BASEMAP_EVENT, onExternal);
+  }, []);
+
+  const pickBasemap = (id: string) => {
+    const bm = getBasemap(id);
+    localStorage.setItem("ed_basemap", bm.id);
+    setBasemap(bm);
+    window.dispatchEvent(new CustomEvent(ED_BASEMAP_EVENT, { detail: bm.id }));
+  };
 
   return (
     <div className="ed-layers">
       {open && (
         <div className="ed-layers-card" role="dialog" aria-label="Tampilkan lapisan">
-          <div className="ed-layers-title">Tampilkan Lapisan</div>
+          <div className="ed-layers-head">
+            <div className="ed-layers-title">Tampilkan Lapisan</div>
+            <button
+              type="button"
+              className="ed-layers-close"
+              onClick={onToggleOpen}
+              aria-label="Tutup panel lapisan"
+              title="Tutup"
+            >
+              ✕
+            </button>
+          </div>
           <div className="ed-layers-name">{label}</div>
           <button
             type="button"
@@ -165,6 +193,24 @@ export default function LayersPanel({
               </div>
             </>
           )}
+
+          <div className="ed-layers-title ed-layers-title-gap">Peta dasar</div>
+          {BASEMAPS.map((b) => {
+            const on = b.id === basemap.id;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                className={`ed-layer-row${on ? " on" : ""}`}
+                onClick={() => pickBasemap(b.id)}
+                aria-pressed={on}
+              >
+                <span className="ed-layer-swatch" style={{ background: b.swatch }} />
+                <span className="ed-layer-label">{b.label}</span>
+                <span className="ed-layer-state">{on ? "✓" : ""}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

@@ -359,6 +359,34 @@ body {
   gap: 8px;
   align-items: flex-start;
 }
+/* Phone chrome that lives in the drawer: theme toggle + editor status, moved
+   out of the topbar so the map keeps a single row of chrome at the top. */
+.sidebar-editor {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sidebar-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-status {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .sidebar-user .user-name {
   font-weight: 600;
   font-size: 14px;
@@ -938,7 +966,7 @@ body {
 /* ---- Status chip + Publish (top-right) ---- */
 .ed-topright {
   position: absolute;
-  top: var(--ed-float-gap);
+  top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
   right: var(--ed-float-gap);
   z-index: 7;
   display: flex;
@@ -1033,7 +1061,7 @@ body {
 /* ---- "Tambah titik" jenis picker (below the toolbar) ---- */
 .ed-addmenu {
   position: absolute;
-  top: 60px;
+  top: calc(var(--ed-float-gap) + var(--ed-row) + 60px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
@@ -1116,7 +1144,7 @@ body {
 /* ---- Editor toolbar (top-center, horizontal) ---- */
 .ed-toolbar {
   position: absolute;
-  top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
+  top: calc(var(--ed-float-gap) + var(--ed-row));
   left: 0;
   right: 0;
   margin-inline: auto;
@@ -1317,6 +1345,37 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
+}
+.ed-layers-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ed-layers-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ed-layers-close:hover {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--text);
+}
+.ed-layers-title-gap {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft-3);
 }
 .ed-layers-name {
   font-size: 13px;
@@ -1520,8 +1579,8 @@ body {
 }
 .content-search {
   position: fixed;
-  top: calc(var(--ed-float-inset) + 44px);
-  left: var(--ed-float-inset);
+  top: var(--ed-float-inset);
+  left: auto;
   right: var(--ed-float-inset);
   z-index: 40;
   display: flex;
@@ -1589,9 +1648,9 @@ body {
    Where the pill sits depends on the available width — see the "Editor chrome —
    responsive ladder" at the end of this file. */
 .ed-search {
-  flex: 1;
+  flex: none;
   height: 44px;
-  width: auto;
+  width: 340px;
   max-width: none;
   border-radius: 999px;
 }
@@ -1610,6 +1669,29 @@ body {
 }
 .ed-search-menu {
   width: 100%;
+}
+/* Search pill slots (phone): the leading button replaces the magnifier and the
+   trailing slot holds Publish, so the input only pads where it has no slot. */
+.ed-search-lead {
+  flex-shrink: 0;
+  margin-left: 5px;
+}
+.ed-search-trail {
+  flex-shrink: 0;
+  margin-right: 5px;
+}
+.ed-search.has-lead .ed-search-input {
+  padding-left: 8px;
+}
+.ed-search.has-trail .ed-search-input {
+  padding-right: 8px;
+}
+.ed-search-clear.inline {
+  position: static;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
 }
 .ed-search-head {
   display: flex;
@@ -4001,61 +4083,43 @@ body {
    Editor chrome — responsive ladder
 
    The top of the map stacks rows and every control keeps a real box, so
-   nothing is ever squeezed: topbar (34px) → search (44px) → toolbar
-   (44px) → status (34px). Roomier screens fold the toolbar back onto the
-   topbar's row, where it fits beside the search.
+   nothing is ever squeezed. Rows from the top: search (44px) → toolbar
+   (44px) → status (34px). The base rules above describe the tablet layout
+   (search as a pill at the map's top-right); the wide tier folds the toolbar
+   onto the search's row, and the phone tier gives the search a full-width row.
    ================================================================ */
 
-/* Phone: the search takes its own full-width row under the topbar (which keeps
-   the sidebar toggle, basemap picker, status and theme toggle), and the toolbar
-   gets the row beneath that. */
-@media (max-width: 820px) {
+/* Phone: the search spans its own row under the topbar, the toolbar follows.
+   The topbar's controls move into the search pill and the sidebar (see
+   AppShell), so the floating status cluster is not used here. */
+@media (max-width: 600px) {
+  .content-search {
+    top: calc(var(--ed-float-inset) + 44px);
+    left: var(--ed-float-inset);
+    right: var(--ed-float-inset);
+  }
+  .ed-search {
+    flex: 1;
+    width: auto;
+  }
+  .ed-toolbar {
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
+  }
   .ed-addmenu {
     top: calc(var(--ed-float-gap) + var(--ed-row) * 2 + 60px);
   }
   .ed-panel {
     top: calc(var(--ed-float-gap) + var(--ed-row) * 3);
   }
-}
-
-/* Tablet: the search floats top-right, the toolbar takes the row beneath it. */
-@media (min-width: 821px) and (max-width: 1066px) and (min-height: 561px) {
-  .content-search {
-    top: var(--ed-float-inset);
-    left: auto;
-    right: var(--ed-float-inset);
-  }
-  .ed-search {
-    flex: none;
-    width: 340px;
-  }
-  .ed-toolbar {
-    top: calc(var(--ed-float-gap) + var(--ed-row));
-  }
-  .ed-addmenu {
-    top: calc(var(--ed-float-gap) + var(--ed-row) + 60px);
-  }
   .ed-topright {
-    top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
-  }
-  .ed-panel {
-    top: calc(var(--ed-float-gap) + var(--ed-row) * 2 + 44px);
+    display: none;
   }
 }
 
-/* Wide — or short landscape with room: topbar, toolbar and search share one row.
+/* Wide — or short landscape with room: search, toolbar and status share one row.
    The toolbar is confined to the gap between them, so it can neither collide
    with the search nor be squeezed by it. */
 @media (min-width: 1067px), (min-width: 821px) and (max-height: 560px) {
-  .content-search {
-    top: var(--ed-float-inset);
-    left: auto;
-    right: var(--ed-float-inset);
-  }
-  .ed-search {
-    flex: none;
-    width: 340px;
-  }
   .ed-toolbar {
     top: var(--ed-float-gap);
     left: calc(var(--ed-float-gap) + 120px);
