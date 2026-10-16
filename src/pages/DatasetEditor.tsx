@@ -414,6 +414,12 @@ export default function DatasetEditor() {
     meta?.geometryType === "Point" ? "point" : "line"
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** What the select tool acts on. "feature" = the dataset's own rows,
+   *  "road" = the published ruas_jalan reference network. */
+  const [selectMode, setSelectMode] = useState<"feature" | "road">("feature");
+  /** Road selection, keyed on id_ruas_jalan so it lines up with the
+   *  hiddenRoads list and the layer panel's road rows. */
+  const [selectedRoadIds, setSelectedRoadIds] = useState<string[]>([]);
   const [marquee, setMarquee] = useState<{
     x1: number;
     y1: number;
@@ -447,6 +453,9 @@ export default function DatasetEditor() {
   const roadUPTDRef = useRef<string[]>([...ROAD_UPTD]);
   const [hiddenRoads, setHiddenRoads] = useState<string[]>([]);
   const hiddenRoadsRef = useRef<string[]>([]);
+  const selectedRoadIdsRef = useRef<string[]>([]);
+  const selectedIdsRef = useRef<string[]>([]);
+  const selectModeRef = useRef<"feature" | "road">("feature");
   const [roadList, setRoadList] = useState<RoadItem[]>([]);
   const searchMarkerRef = useRef<maplibregl.Marker | null>(null);
   const searchGeomAbortRef = useRef<AbortController | null>(null);
@@ -1180,6 +1189,38 @@ export default function DatasetEditor() {
     popupRef.current = null;
   }, []);
 
+  /** Road identity shared by the selection, the layer panel and hiddenRoads. */
+  const roadIdOf = useCallback((feat: Feature) => {
+    const p = (feat.properties ?? {}) as Record<string, unknown>;
+    return String(p.id_ruas_jalan ?? p._source_id ?? "");
+  }, []);
+
+  /** Paint the yellow highlight from the selected road ids. The info card state
+   *  and the roads-selected source must always move together, or the highlight
+   *  outlives the card. */
+  const applyRoadSelection = useCallback(
+    (ids: string[]) => {
+      selectedRoadIdsRef.current = ids;
+      setSelectedRoadIds(ids);
+      const src = mapRef.current?.getSource("roads-selected") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      const set = new Set(ids);
+      src?.setData({
+        type: "FeatureCollection",
+        features: (roadsBgRef.current?.features ?? []).filter((f) =>
+          set.has(roadIdOf(f))
+        ),
+      });
+    },
+    [roadIdOf]
+  );
+
+  const clearRoadSelection = useCallback(() => {
+    setRoadInfo(null);
+    applyRoadSelection([]);
+  }, [applyRoadSelection]);
+
   /* ---- map init ---- */
   useEffect(() => {
     if (!mapContainerRef.current || !meta) return;
@@ -1523,6 +1564,7 @@ export default function DatasetEditor() {
           });
           map.on("mouseenter", lid, () => {
             if (activeToolRef.current !== "select") return;
+            if (selectModeRef.current !== "feature") return;
             map.getCanvas().style.cursor = "pointer";
           });
           map.on("mouseleave", lid, () => {
@@ -1536,6 +1578,7 @@ export default function DatasetEditor() {
       for (const lid of layerIds) {
         map.on("mouseenter", lid, () => {
           if (activeToolRef.current !== "select") return;
+          if (selectModeRef.current !== "feature") return;
           map.getCanvas().style.cursor = "pointer";
         });
         map.on("mouseleave", lid, () => {
@@ -1551,23 +1594,16 @@ export default function DatasetEditor() {
 
       map.on("click", (e: maplibregl.MapMouseEvent) => {
         if (activeToolRef.current !== "select") return;
-        const clickedOnFeature = map.queryRenderedFeatures(e.point, {
-          layers: layerIds,
-        });
-        if (clickedOnFeature.length > 0) return;
+        const additive = e.originalEvent.ctrlKey || e.originalEvent.metaKey;
 
-        // Road reference layer click → read-only metadata + yellow highlight.
-        if (datasetId !== "ruas_jalan") {
-          const roadFeats = map.queryRenderedFeatures(e.point, {
-            layers: ["roads-bg-line", "roads-bg-hit"],
-          });
-          if (roadFeats.length) {
-            const roadFeat = roadFeats[0] as unknown as Feature;
-            setRoadInfo(roadFeat);
-            const src = map.getSource("roads-selected") as
-              | maplibregl.GeoJSONSource
-              | undefined;
-            if (src) {
+        if (selectModeRef.current === "road") {
+          // Road mode: only the reference network responds to clicks.
+          if (datasetId !== "ruas_jalan") {
+            const roadFeats = map.queryRenderedFeatures(e.point, {
+              layers: ["roads-bg-line", "roads-bg-hit"],
+            });
+            if (roadFeats.length) {
+              const roadFeat = roadFeats[0] as unknown as Feature;
               // Use the pristine feature from the original RPC data rather
               // than the click-event object: queryRenderedFeatures features
               // carry MapLibre internals that GeoJSONSource.setData silently
@@ -1583,20 +1619,40 @@ export default function DatasetEditor() {
                     (f.properties as GeoProps | null)?.kode_number ===
                     (roadFeat.properties as GeoProps | null)?.kode_number
                 );
-              const cleanFeature = clean
-                ? clean
-                : JSON.parse(JSON.stringify(roadFeat));
-              src.setData({
-                type: "FeatureCollection",
-                features: [cleanFeature as Feature],
-              });
+              const cleanFeature =
+                clean ?? (JSON.parse(JSON.stringify(roadFeat)) as Feature);
+              const id = roadIdOf(cleanFeature);
+              if (additive) {
+                // Ctrl/Cmd+click adds to (or removes from) the road selection;
+                // the single-road card gives way to the bulk bar.
+                const prev = selectedRoadIdsRef.current;
+                setRoadInfo(null);
+                applyRoadSelection(
+                  prev.includes(id)
+                    ? prev.filter((x) => x !== id)
+                    : [...prev, id]
+                );
+              } else {
+                setRoadInfo(cleanFeature);
+                applyRoadSelection([id]);
+              }
+              closePopup();
+              return;
             }
-            closePopup();
-            return;
           }
+          clearRoadSelection();
+          closePopup();
+          return;
         }
 
+        // Feature mode: the dataset's own rows own the clicks.
+        const clickedOnFeature = map.queryRenderedFeatures(e.point, {
+          layers: layerIds,
+        });
+        if (clickedOnFeature.length > 0) return;
+
         setSelectedIds([]);
+        clearRoadSelection();
         closePopup();
 
         // Empty-map click always ends the edit session; this handler is
@@ -1606,12 +1662,12 @@ export default function DatasetEditor() {
           setSelectedFeature(null);
           setFormMode("create");
         }
-        setRoadInfo(null);
       });
 
       if (datasetId !== "ruas_jalan") {
         map.on("mouseenter", "roads-bg-hit", () => {
           if (activeToolRef.current !== "select") return;
+          if (selectModeRef.current !== "road") return;
           map.getCanvas().style.cursor = "pointer";
         });
         map.on("mouseleave", "roads-bg-hit", () => {
@@ -1864,6 +1920,9 @@ export default function DatasetEditor() {
         if (!feature) return;
         const src = map.getSource("roads-selected") as maplibregl.GeoJSONSource | undefined;
         src?.setData({ type: "FeatureCollection", features: [feature] });
+        // Keep the card in step with the highlight, so a search pick behaves
+        // exactly like clicking the road on the map.
+        setRoadInfo(feature);
         const bounds = computeBBox({ type: "FeatureCollection", features: [feature] });
         if (bounds) {
           map.fitBounds(
@@ -1934,6 +1993,16 @@ export default function DatasetEditor() {
   useEffect(() => {
     activeToolRef.current = activeTool;
   }, [activeTool]);
+
+  /* ---- keep selectMode ref in sync for the mount-time map handlers ---- */
+  useEffect(() => {
+    selectModeRef.current = selectMode;
+  }, [selectMode]);
+
+  /* ---- keep the feature selection ref in sync for the mouse handlers ---- */
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
 
   /* ---- keep clusterMode ref in sync for map handlers ---- */
   useEffect(() => {
@@ -2070,9 +2139,22 @@ export default function DatasetEditor() {
     return String(feat.id);
   }, []);
 
+  const toggleFeatureSelection = useCallback((id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
   const handleFeatureClick = useCallback(
-    (feat: Feature) => {
+    (feat: Feature, additive = false) => {
       closePopup();
+      clearRoadSelection();
+      if (additive) {
+        // Ctrl/Cmd+click extends the selection; the edit form is reserved for
+        // a plain click so additive picking never interrupts the flow.
+        toggleFeatureSelection(resolveDraftId(feat));
+        return;
+      }
       setSelectedIds([]);
       void fetchFeatureDetail(resolveDraftId(feat)).then((full) => {
         setSelectedFeature(full ?? feat);
@@ -2081,7 +2163,13 @@ export default function DatasetEditor() {
         setFormOpen(true);
       });
     },
-    [closePopup, fetchFeatureDetail, resolveDraftId]
+    [
+      clearRoadSelection,
+      closePopup,
+      fetchFeatureDetail,
+      resolveDraftId,
+      toggleFeatureSelection,
+    ]
   );
 
   useEffect(() => {
@@ -2314,7 +2402,12 @@ export default function DatasetEditor() {
           // Pure click (no drag): the feature was removed from the source on
           // mousedown and restored here, so MapLibre's layer click event won't
           // reliably fire — open the edit panel directly.
-          if (feat) handleFeatureClick(feat as Feature);
+          if (feat) {
+            handleFeatureClick(
+              feat as Feature,
+              e.originalEvent.ctrlKey || e.originalEvent.metaKey
+            );
+          }
           return;
         }
         const newGeom = translateGeometry(d.origGeom, dLng, dLat);
@@ -2351,17 +2444,37 @@ export default function DatasetEditor() {
         applyDragPan(activeToolRef.current);
         map.getCanvas().style.cursor = "default";
         if (x2 - x1 < 5 && y2 - y1 < 5) return;
-        const hits = map.queryRenderedFeatures(
-          [
-            [x1, y1],
-            [x2, y2],
-          ] as [[number, number], [number, number]],
-          { layers: [layerId] }
-        );
+        const box = [
+          [x1, y1],
+          [x2, y2],
+        ] as [[number, number], [number, number]];
+        const additive = e.originalEvent.ctrlKey || e.originalEvent.metaKey;
+
+        if (selectModeRef.current === "road") {
+          // Same layers the road clicks use, so marquee and Ctrl+click pick
+          // from one pool.
+          const hits = map.queryRenderedFeatures(box, {
+            layers: ["roads-bg-line", "roads-bg-hit"],
+          });
+          const ids = Array.from(
+            new Set(hits.map((f) => roadIdOf(f as unknown as Feature)))
+          ).filter(Boolean);
+          setRoadInfo(null);
+          applyRoadSelection(
+            additive
+              ? Array.from(new Set([...selectedRoadIdsRef.current, ...ids]))
+              : ids
+          );
+          return;
+        }
+
+        const hits = map.queryRenderedFeatures(box, { layers: [layerId] });
         const ids = Array.from(
           new Set(hits.map((f) => resolveDraftId(f as unknown as Feature)))
         );
-        setSelectedIds(ids);
+        setSelectedIds(
+          additive ? Array.from(new Set([...selectedIdsRef.current, ...ids])) : ids
+        );
       }
     };
 
@@ -2402,7 +2515,11 @@ export default function DatasetEditor() {
     const handler = (e: maplibregl.MapLayerMouseEvent) => {
       if (!e.features?.length) return;
       if (activeToolRef.current !== "select") return;
-      handleFeatureClick(e.features[0] as unknown as Feature);
+      if (selectModeRef.current !== "feature") return;
+      handleFeatureClick(
+        e.features[0] as unknown as Feature,
+        e.originalEvent.ctrlKey || e.originalEvent.metaKey
+      );
     };
 
     map.on("click", layerId, handler);
@@ -2452,8 +2569,17 @@ export default function DatasetEditor() {
 
   /* ---- clear selection when leaving the select tool ---- */
   useEffect(() => {
-    if (activeTool !== "select") setSelectedIds([]);
-  }, [activeTool]);
+    if (activeTool !== "select") {
+      setSelectedIds([]);
+      clearRoadSelection();
+    }
+  }, [activeTool, clearRoadSelection]);
+
+  /* ---- switching select mode drops the other mode's selection ---- */
+  useEffect(() => {
+    if (selectMode === "road") setSelectedIds([]);
+    else clearRoadSelection();
+  }, [selectMode, clearRoadSelection]);
 
   /* ================================================================ */
   /*  TOOLBOX — Excalidraw-style: grouped tools with keyboard 1-9     */
@@ -2472,11 +2598,12 @@ export default function DatasetEditor() {
 
   const toolboxBtns: ToolboxBtn[] = [
     {
-      key: "select",
+      key: "select-feature",
       group: "action",
       show: true,
-      active: activeTool === "select",
-      title: "Pilih (cursor) — klik fitur untuk edit/hapus, seret untuk pindah",
+      active: activeTool === "select" && selectMode === "feature",
+      title:
+        "Pilih titik/koordinat — klik untuk edit, Ctrl+klik untuk menambah, seret untuk memilih banyak",
       icon: (
         <svg
           width="18"
@@ -2492,7 +2619,38 @@ export default function DatasetEditor() {
           <path d="M11.07 11.07l4.24 4.24" />
         </svg>
       ),
-      onClick: () => setActiveTool("select"),
+      onClick: () => {
+        setSelectMode("feature");
+        setActiveTool("select");
+      },
+    },
+    {
+      key: "select-road",
+      group: "action",
+      show: datasetId !== "ruas_jalan",
+      active: activeTool === "select" && selectMode === "road",
+      title:
+        "Pilih jalan (referensi) — klik untuk metadata, Ctrl+klik untuk menambah, seret untuk memilih banyak",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 3l-2 18" />
+          <path d="M18 3l2 18" />
+          <path d="M12 4v3M12 11v3M12 18v2" />
+        </svg>
+      ),
+      onClick: () => {
+        setSelectMode("road");
+        setActiveTool("select");
+      },
     },
     {
       key: "pan",
@@ -2993,8 +3151,8 @@ export default function DatasetEditor() {
             />
           )}
 
-          {/* ---- Selection bar (bulk actions) ---- */}
-          {selectedIds.length > 0 && (
+          {/* ---- Selection bar (bulk actions, one variant per select mode) ---- */}
+          {selectMode === "feature" && selectedIds.length > 0 && (
             <div className="ed-selection-bar">
               <span className="ed-selection-count">
                 {selectedIds.length} fitur terpilih
@@ -3010,6 +3168,26 @@ export default function DatasetEditor() {
                 className="ed-selection-btn"
                 onClick={() => setSelectedIds([])}
               >
+                Batal
+              </button>
+            </div>
+          )}
+
+          {selectMode === "road" && selectedRoadIds.length > 0 && !roadInfo && (
+            <div className="ed-selection-bar">
+              <span className="ed-selection-count">
+                {selectedRoadIds.length} fitur terpilih
+              </span>
+              <button
+                className="ed-selection-btn"
+                onClick={() => {
+                  setManyRoadsVisible(selectedRoadIds, false);
+                  clearRoadSelection();
+                }}
+              >
+                Sembunyikan
+              </button>
+              <button className="ed-selection-btn" onClick={clearRoadSelection}>
                 Batal
               </button>
             </div>
@@ -3085,13 +3263,7 @@ export default function DatasetEditor() {
                 <h3>Meta Data Ruas Jalan</h3>
                 <button
                   className="ed-btn-icon"
-                  onClick={() => {
-                    setRoadInfo(null);
-                    const src = mapRef.current?.getSource("roads-selected") as
-                      | maplibregl.GeoJSONSource
-                      | undefined;
-                    src?.setData({ type: "FeatureCollection", features: [] });
-                  }}
+                  onClick={clearRoadSelection}
                   title="Tutup panel"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
