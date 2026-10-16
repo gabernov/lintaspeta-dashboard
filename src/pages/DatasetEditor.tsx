@@ -374,9 +374,10 @@ function sampleVertices(
   });
 }
 
-/** Roads hidden by the user persist across reloads; the reference network is
- *  shared by every dataset, so a single key covers all of them. */
-const HIDDEN_ROADS_KEY = "ed_hidden_roads";
+/** Roads hidden by the user persist across reloads, keyed per dataset: the same
+ *  reference network is drawn on every dataset, but hiding a road on one map
+ *  must not hide it on the others. */
+const hiddenRoadsKey = (datasetId: string) => `ed_hidden_roads_${datasetId}`;
 
 /* ================================================================== */
 export default function DatasetEditor() {
@@ -473,7 +474,7 @@ export default function DatasetEditor() {
   const [hiddenRoads, setHiddenRoads] = useState<string[]>(() => {
     try {
       const parsed: unknown = JSON.parse(
-        localStorage.getItem(HIDDEN_ROADS_KEY) ?? "[]"
+        localStorage.getItem(hiddenRoadsKey(datasetId ?? "")) ?? "[]"
       );
       return Array.isArray(parsed) ? parsed.map(String) : [];
     } catch {
@@ -863,11 +864,11 @@ export default function DatasetEditor() {
     hiddenRoadsRef.current = hiddenRoads;
     applyRoadStyle();
     try {
-      localStorage.setItem(HIDDEN_ROADS_KEY, JSON.stringify(hiddenRoads));
+      localStorage.setItem(hiddenRoadsKey(datasetId ?? ""), JSON.stringify(hiddenRoads));
     } catch {
       // Storage blocked or full: the in-memory list still applies this session.
     }
-  }, [hiddenRoads, applyRoadStyle]);
+  }, [hiddenRoads, applyRoadStyle, datasetId]);
 
   const handleSave = useCallback(
     async (values: GeoProps) => {
