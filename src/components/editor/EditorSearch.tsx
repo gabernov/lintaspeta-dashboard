@@ -22,6 +22,8 @@ type Results = {
 
 const EMPTY: Results = { coord: null, places: [], roads: [], roadTotal: 0, loading: false };
 
+const MENU_ID = "ed-search-results";
+
 type Props = {
   leading?: ReactNode;
   trailing?: ReactNode;
@@ -161,6 +163,13 @@ export default function EditorSearch({ leading, trailing }: Props) {
         className="ed-search-input"
         placeholder="Cari koordinat, tempat, atau ruas jalan..."
         aria-label="Cari koordinat, tempat, atau ruas jalan"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={MENU_ID}
+        aria-autocomplete="list"
+        aria-activedescendant={
+          open && items.length ? `${MENU_ID}-opt-${Math.min(active, items.length - 1)}` : undefined
+        }
         autoComplete="off"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -187,7 +196,7 @@ export default function EditorSearch({ leading, trailing }: Props) {
       {trailing}
 
       {open && (
-        <div className="ed-search-menu" role="listbox">
+        <div className="ed-search-menu" role="listbox" id={MENU_ID} aria-label="Hasil pencarian">
           {!hasAny && (
             <div className="ed-search-note">
               {results.loading ? "Mencari..." : "Tidak ditemukan"}
@@ -200,6 +209,7 @@ export default function EditorSearch({ leading, trailing }: Props) {
               <button
                 type="button"
                 role="option"
+                id={`${MENU_ID}-opt-0`}
                 aria-selected={active === 0}
                 className={rowClass(0)}
                 onClick={() => pick(results.coord as SearchHit)}
@@ -227,6 +237,7 @@ export default function EditorSearch({ leading, trailing }: Props) {
                     key={`${hit.ruasId}-${hit.kode}`}
                     type="button"
                     role="option"
+                    id={`${MENU_ID}-opt-${i}`}
                     aria-selected={i === active}
                     className={rowClass(i)}
                     onClick={() => pick(hit)}
@@ -252,6 +263,7 @@ export default function EditorSearch({ leading, trailing }: Props) {
                     key={`${hit.osmType}-${hit.osmId}-${hit.lat}`}
                     type="button"
                     role="option"
+                    id={`${MENU_ID}-opt-${i}`}
                     aria-selected={i === active}
                     className={rowClass(i)}
                     onClick={() => pick(hit)}

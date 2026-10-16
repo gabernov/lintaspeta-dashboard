@@ -96,7 +96,7 @@ export default function AppShell() {
 
   // Rendered in the topbar normally, and in the drawer on phones.
   const themeToggleButton = (
-    <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Toggle theme">
+    <button className="theme-toggle" onClick={toggleTheme} title={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"} aria-label="Ganti tema" aria-pressed={theme === "dark"}>
       {theme === "dark" ? (
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="4" />
@@ -111,7 +111,7 @@ export default function AppShell() {
   );
 
   const sidebarToggleButton = (
-    <button className="sidebar-toggle" onClick={handleToggleSidebar} title={drawerOpen ? "Tutup menu" : "Buka menu"} aria-label={drawerOpen ? "Tutup menu" : "Buka menu"} aria-expanded={drawerOpen}>
+    <button className="sidebar-toggle" onClick={handleToggleSidebar} title={drawerOpen ? "Tutup menu" : "Buka menu"} aria-label={drawerOpen ? "Tutup menu" : "Buka menu"} aria-expanded={drawerOpen} aria-controls="app-nav">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         {drawerOpen ? (
           <polyline points="15 18 9 12 15 6" />
@@ -126,7 +126,7 @@ export default function AppShell() {
     <div
       className={`shell ${collapsed ? "shell-collapsed" : ""} ${mobileNavOpen ? "nav-open" : ""}`}
     >
-      <aside className="sidebar">
+      <aside className="sidebar" id="app-nav" inert={isMobile && !mobileNavOpen ? true : undefined}>
           <div className="sidebar-brand">
             <div className="sidebar-brand-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
