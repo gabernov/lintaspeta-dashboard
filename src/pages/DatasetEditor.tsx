@@ -14,6 +14,12 @@ import {
   makeRoadSnap,
   type RoadSnapIndex,
 } from "../lib/roadSnap";
+import {
+  buildRoadGraph,
+  nearestNode,
+  routeBetween,
+  type RoadGraph,
+} from "../lib/roadRoute";
 import { ROAD_UPTD, ROAD_UPTD_FALLBACK, UPTD_COLORS, type RoadItem } from "../lib/roadUptd";
 import LayersPanel from "../components/editor/LayersPanel";
 import {
@@ -386,7 +392,7 @@ export default function DatasetEditor() {
   const hasFittedRef = useRef(false);
   const featuresRef = useRef<FeatureCollection | null>(null);
   const applyRuasColorsRef = useRef<() => void>(() => {});
-  const activeToolRef = useRef<"select" | "pan" | "draw">("select");
+  const activeToolRef = useRef<"select" | "pan" | "draw" | "route">("select");
   const dragRef = useRef<{
     featureId: string;
     startLngLat: { lng: number; lat: number };
@@ -415,7 +421,7 @@ export default function DatasetEditor() {
     features: [],
   });
   const [editWindow, setEditWindow] = useState<EditWindow | null>(null);
-  const [activeTool, setActiveTool] = useState<"select" | "pan" | "draw">(
+  const [activeTool, setActiveTool] = useState<"select" | "pan" | "draw" | "route">(
     "select"
   );
   const [drawTarget, setDrawTarget] = useState<"point" | "line">(
@@ -492,6 +498,10 @@ export default function DatasetEditor() {
   const [snapToRoads, setSnapToRoads] = useState(
     () => localStorage.getItem("ed_snap_roads") !== "false"
   );
+  /** "Create route": pick a start then an end, the line follows the roads. */
+  const routeStartRef = useRef<number | null>(null);
+  const roadGraphRef = useRef<RoadGraph | null>(null);
+  const routeMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
 
@@ -627,7 +637,7 @@ export default function DatasetEditor() {
     [handleStartDraw]
   );
 
-  const applyDragPan = useCallback((tool: "select" | "pan" | "draw") => {
+  const applyDragPan = useCallback((tool: "select" | "pan" | "draw" | "route") => {
     const map = mapRef.current;
     if (!map) return;
     if (tool === "pan") map.dragPan.enable();
@@ -1264,6 +1274,79 @@ export default function DatasetEditor() {
     applyRoadSelection([]);
   }, [applyRoadSelection]);
 
+  /** Create-route tool: first click sets the start node, second click routes to
+   *  it along the reference network and hands the line to TerraDraw so it stays
+   *  editable before the user saves it. */
+  const handleRouteClick = useCallback(
+    (lng: number, lat: number) => {
+      const graph = (() => {
+        if (roadGraphRef.current) return roadGraphRef.current;
+        const fc = roadsBgRef.current;
+        if (!fc) return null;
+        roadGraphRef.current = buildRoadGraph(fc);
+        return roadGraphRef.current;
+      })();
+      if (!graph) {
+        showToast("Jaringan ruas belum siap", false);
+        return;
+      }
+
+      const node = nearestNode(graph, lng, lat, 300);
+      if (node === null) {
+        showToast("Tidak ada ruas jalan di dekat titik itu", false);
+        return;
+      }
+
+      const start = routeStartRef.current;
+      if (start === null) {
+        routeStartRef.current = node;
+        const map = mapRef.current;
+        if (map) {
+          routeMarkerRef.current?.remove();
+          routeMarkerRef.current = new maplibregl.Marker({ color: "#f59e0b" })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        }
+        showToast("Titik awal dipilih — klik titik akhir", true);
+        return;
+      }
+
+      const route = routeBetween(graph, start, node);
+      routeStartRef.current = null;
+      routeMarkerRef.current?.remove();
+      routeMarkerRef.current = null;
+      if (!route || route.coordinates.length < 2) {
+        showToast("Rute tidak ditemukan di jaringan ruas", false);
+        return;
+      }
+
+      tdRef.current?.addFeatures([
+        {
+          type: "Feature",
+          properties: { mode: "linestring" },
+          geometry: { type: "LineString", coordinates: route.coordinates },
+        },
+      ]);
+      setPendingGeometry({
+        type: "LineString",
+        coordinates: route.coordinates,
+      });
+      setFormMode("create");
+      setSelectedFeature(null);
+      setFormOpen(true);
+      setActiveTool("select");
+      showToast(
+        `Rute dibuat mengikuti jalan (${(route.meters / 1000).toFixed(2)} km)`,
+        true
+      );
+    },
+    [showToast]
+  );
+  const handleRouteClickRef = useRef(handleRouteClick);
+  useEffect(() => {
+    handleRouteClickRef.current = handleRouteClick;
+  });
+
   /* ---- map init ---- */
   useEffect(() => {
     if (!mapContainerRef.current || !meta) return;
@@ -1653,6 +1736,10 @@ export default function DatasetEditor() {
       });
 
       map.on("click", (e: maplibregl.MapMouseEvent) => {
+        if (activeToolRef.current === "route") {
+          handleRouteClickRef.current(e.lngLat.lng, e.lngLat.lat);
+          return;
+        }
         if (activeToolRef.current !== "select") return;
         const additive = e.originalEvent.ctrlKey || e.originalEvent.metaKey;
 
@@ -2099,7 +2186,7 @@ export default function DatasetEditor() {
     const canvas = map.getCanvas();
     const applyCursor = () => {
       if (activeTool === "pan") canvas.style.cursor = "grab";
-      else if (activeTool === "draw") canvas.style.cursor = "crosshair";
+      else if (activeTool === "draw" || activeTool === "route") canvas.style.cursor = "crosshair";
       else canvas.style.cursor = "default";
     };
     applyCursor();
@@ -2786,6 +2873,36 @@ export default function DatasetEditor() {
         jenisOptions.length > 0
           ? setAddMenuOpen((v) => !v)
           : handleStartDraw(isPoint ? "point" : "line"),
+    },
+    {
+      key: "route",
+      group: "action",
+      show: !isPoint,
+      active: activeTool === "route",
+      title:
+        "Buat rute — klik titik awal lalu titik akhir, garis otomatis mengikuti jaringan jalan",
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="6" cy="19" r="2.5" />
+          <circle cx="18" cy="5" r="2.5" />
+          <path d="M8.2 17.4c3.4-1.2 1.2-4.6 4-6.2 1.7-1 2.4-2.6 3.2-4.1" />
+        </svg>
+      ),
+      onClick: () => {
+        routeStartRef.current = null;
+        routeMarkerRef.current?.remove();
+        routeMarkerRef.current = null;
+        setActiveTool(activeTool === "route" ? "select" : "route");
+      },
     },
     {
       key: "undo",
