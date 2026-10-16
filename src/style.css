@@ -666,6 +666,7 @@ body {
   --ed-map-radius: 16px;
   --ed-float-gap: 12px;
   --ed-float-inset: calc(var(--ed-map-inset) + var(--ed-float-gap));
+  --ed-row: 52px;
 }
 :root[data-theme="light"] {
   --map-backdrop: #cbd5e1;
@@ -1115,14 +1116,19 @@ body {
 /* ---- Editor toolbar (top-center, horizontal) ---- */
 .ed-toolbar {
   position: absolute;
-  top: var(--ed-float-gap);
-  left: 50%;
-  transform: translateX(-50%);
+  top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: calc(100% - var(--ed-float-gap) * 2);
+  transform: none;
   z-index: 6;
   display: flex;
   align-items: center;
+  justify-content: safe center;
   gap: 2px;
-  max-width: calc(100% - 740px);
+  flex-wrap: nowrap;
   overflow-x: auto;
   scrollbar-width: none;
   background: var(--glass-soft);
@@ -1513,44 +1519,13 @@ body {
   backdrop-filter: blur(8px);
 }
 .content-search {
+  position: fixed;
+  top: calc(var(--ed-float-inset) + 44px);
+  left: var(--ed-float-inset);
+  right: var(--ed-float-inset);
+  z-index: 40;
   display: flex;
   min-width: 0;
-}
-/* Matching the public map, the search floats as a pill at the map's top-right
-   on roomy screens; on narrow or short screens it stays inline in the topbar
-   row, where a floating 340px pill would not fit. */
-@media (min-width: 821px) and (min-height: 561px) {
-  .content-search {
-    position: fixed;
-    top: var(--ed-float-inset);
-    right: var(--ed-float-inset);
-    z-index: 40;
-  }
-  .ed-search {
-    width: 340px;
-    max-width: none;
-    height: 44px;
-    border-radius: 999px;
-  }
-  .ed-search-input {
-    font-size: 13.5px;
-    padding: 0 40px 0 42px;
-  }
-  .ed-search-icon {
-    left: 15px;
-  }
-  .ed-search-clear {
-    right: 12px;
-    width: 22px;
-    height: 22px;
-    font-size: 16px;
-  }
-  .ed-search-menu {
-    width: 100%;
-  }
-  .ed-topright {
-    top: calc(var(--ed-float-gap) + 52px);
-  }
 }
 .ed-search-icon {
   position: absolute;
@@ -1607,6 +1582,34 @@ body {
   backdrop-filter: blur(18px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   z-index: 50;
+}
+/* The editor's map search is a pill (like the public map's). It only exists on
+   map routes (EditorSearch returns null elsewhere). These overrides must stay
+   after the base .ed-search-* rules above, or equal specificity makes them lose.
+   Where the pill sits depends on the available width — see the "Editor chrome —
+   responsive ladder" at the end of this file. */
+.ed-search {
+  flex: 1;
+  height: 44px;
+  width: auto;
+  max-width: none;
+  border-radius: 999px;
+}
+.ed-search-input {
+  font-size: 13.5px;
+  padding: 0 40px 0 42px;
+}
+.ed-search-icon {
+  left: 15px;
+}
+.ed-search-clear {
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  font-size: 16px;
+}
+.ed-search-menu {
+  width: 100%;
 }
 .ed-search-head {
   display: flex;
@@ -2761,9 +2764,6 @@ body {
     background: rgba(2, 6, 23, 0.55);
     backdrop-filter: blur(2px);
   }
-  .content-topbar {
-    padding-inline: 10px;
-  }
   .ed-panel {
     top: 118px;
     z-index: 8;
@@ -2787,12 +2787,7 @@ body {
    844x390). Toolbar top-center, compact status chip below it, Layers
    button bottom-left. */
 @media (max-width: 820px), (max-height: 560px) {
-  .ed-toolbar {
-    top: 62px;
-    max-width: calc(100vw - 16px);
-  }
   .ed-topright {
-    top: 118px;
     right: 8px;
     gap: 6px;
   }
@@ -3999,5 +3994,81 @@ body {
   }
   .landing-hero-actions .landing-btn {
     width: 100%;
+  }
+}
+
+/* ================================================================
+   Editor chrome — responsive ladder
+
+   The top of the map stacks rows and every control keeps a real box, so
+   nothing is ever squeezed: topbar (34px) → search (44px) → toolbar
+   (44px) → status (34px). Roomier screens fold the toolbar back onto the
+   topbar's row, where it fits beside the search.
+   ================================================================ */
+
+/* Phone: the search takes its own full-width row under the topbar (which keeps
+   the sidebar toggle, basemap picker, status and theme toggle), and the toolbar
+   gets the row beneath that. */
+@media (max-width: 820px) {
+  .ed-addmenu {
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 2 + 60px);
+  }
+  .ed-panel {
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 3);
+  }
+}
+
+/* Tablet: the search floats top-right, the toolbar takes the row beneath it. */
+@media (min-width: 821px) and (max-width: 1066px) and (min-height: 561px) {
+  .content-search {
+    top: var(--ed-float-inset);
+    left: auto;
+    right: var(--ed-float-inset);
+  }
+  .ed-search {
+    flex: none;
+    width: 340px;
+  }
+  .ed-toolbar {
+    top: calc(var(--ed-float-gap) + var(--ed-row));
+  }
+  .ed-addmenu {
+    top: calc(var(--ed-float-gap) + var(--ed-row) + 60px);
+  }
+  .ed-topright {
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
+  }
+  .ed-panel {
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 2 + 44px);
+  }
+}
+
+/* Wide — or short landscape with room: topbar, toolbar and search share one row.
+   The toolbar is confined to the gap between them, so it can neither collide
+   with the search nor be squeezed by it. */
+@media (min-width: 1067px), (min-width: 821px) and (max-height: 560px) {
+  .content-search {
+    top: var(--ed-float-inset);
+    left: auto;
+    right: var(--ed-float-inset);
+  }
+  .ed-search {
+    flex: none;
+    width: 340px;
+  }
+  .ed-toolbar {
+    top: var(--ed-float-gap);
+    left: calc(var(--ed-float-gap) + 120px);
+    right: calc(var(--ed-float-gap) + 350px);
+    max-width: 100%;
+  }
+  .ed-addmenu {
+    top: calc(var(--ed-float-gap) + 60px);
+  }
+  .ed-topright {
+    top: calc(var(--ed-float-gap) + var(--ed-row));
+  }
+  .ed-panel {
+    top: calc(var(--ed-float-gap) + 44px);
   }
 }
