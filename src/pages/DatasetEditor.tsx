@@ -9,6 +9,11 @@ import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
 import { resetEditorChrome, setEditorChrome } from "../lib/editorChrome";
 import { fetchOsmGeometry, onSearchSelection, setSharedRoads } from "../lib/editorSearch";
+import {
+  buildRoadSnapIndex,
+  makeRoadSnap,
+  type RoadSnapIndex,
+} from "../lib/roadSnap";
 import { ROAD_UPTD, ROAD_UPTD_FALLBACK, UPTD_COLORS, type RoadItem } from "../lib/roadUptd";
 import LayersPanel from "../components/editor/LayersPanel";
 import {
@@ -451,6 +456,8 @@ export default function DatasetEditor() {
 
   /* ---- per-ruas reference coloring + nearest-ruas autofill ---- */
   const roadsBgRef = useRef<FeatureCollection | null>(null);
+  /** Grid index over roadsBgRef for magnet snapping while drawing lines. */
+  const roadSnapRef = useRef<RoadSnapIndex | null>(null);
   const rambuLookupRef = useRef<Map<string, { kelas_jalan: string; fungsi: string }>>(
     new Map()
   );
@@ -481,6 +488,10 @@ export default function DatasetEditor() {
   const [roadsVisible, setRoadsVisible] = useState(true);
   const featuresVisibleRef = useRef(true);
   const roadsVisibleRef = useRef(true);
+  /** Magnet snapping of drawn lines onto the reference road network. */
+  const [snapToRoads, setSnapToRoads] = useState(
+    () => localStorage.getItem("ed_snap_roads") !== "false"
+  );
   const [nearestPrefill, setNearestPrefill] = useState<GeoProps | null>(null);
   const [nearestHint, setNearestHint] = useState<string | null>(null);
 
@@ -506,6 +517,16 @@ export default function DatasetEditor() {
     ROAD_LAYERS.forEach((id) => vis(id, roadsVisibleRef.current));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const roadSnapToCustom = useMemo(() => makeRoadSnap(roadSnapRef), []);
+  /** Snapping handed to TerraDraw; an empty object turns every magnet off. */
+  const lineSnapping = useMemo(
+    () =>
+      snapToRoads
+        ? { toLine: true, toCoordinate: true, toCustom: roadSnapToCustom }
+        : {},
+    [snapToRoads, roadSnapToCustom]
+  );
 
   useEffect(() => {
     featuresVisibleRef.current = featuresVisible;
@@ -1399,6 +1420,9 @@ export default function DatasetEditor() {
           if (src && "setData" in src) {
             (src as maplibregl.GeoJSONSource).setData(cachedRoads);
           }
+          if (!roadSnapRef.current) {
+            roadSnapRef.current = buildRoadSnapIndex(cachedRoads);
+          }
           applyRuasColorsRef.current();
         } else {
           void supabase
@@ -1406,6 +1430,7 @@ export default function DatasetEditor() {
             .then(({ data }) => {
               if (!data) return;
               roadsBgRef.current = data as FeatureCollection;
+              roadSnapRef.current = buildRoadSnapIndex(data as FeatureCollection);
               setSharedRoads(data as FeatureCollection);
               const fc = data as FeatureCollection;
               setRoadList(
@@ -1762,7 +1787,10 @@ export default function DatasetEditor() {
               }
             : {}
         ),
-        new TerraDrawLineStringMode(),
+        new TerraDrawLineStringMode({
+          snapping: lineSnapping,
+          styles: { snappingPointColor: "#f59e0b", snappingPointWidth: 9 },
+        }),
       ];
 
       const td = new TerraDraw({ adapter, modes });
@@ -2610,6 +2638,14 @@ export default function DatasetEditor() {
     }
   }, [activeTool, clearRoadSelection]);
 
+  /* ---- magnet toggle: re-configure the line mode in place ---- */
+  useEffect(() => {
+    localStorage.setItem("ed_snap_roads", String(snapToRoads));
+    tdRef.current?.updateModeOptions<typeof TerraDrawLineStringMode>("linestring", {
+      snapping: lineSnapping,
+    });
+  }, [snapToRoads, lineSnapping]);
+
   /* ---- switching select mode drops the other mode's selection ---- */
   useEffect(() => {
     if (selectMode === "road") setSelectedIds([]);
@@ -2778,6 +2814,30 @@ export default function DatasetEditor() {
         </svg>
       ),
       onClick: handleRedo,
+    },
+    {
+      key: "snap",
+      group: "mode",
+      show: !isPoint,
+      active: snapToRoads,
+      title: `Magnet ke jalan: ${snapToRoads ? "ON" : "OFF"} — titik garis menempel ke jaringan ruas di belakangnya`,
+      icon: (
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M5 3v8a7 7 0 0 0 14 0V3" />
+          <path d="M5 3h4v5H5z" />
+          <path d="M15 3h4v5h-4z" />
+        </svg>
+      ),
+      onClick: () => setSnapToRoads((v) => !v),
     },
     {
       key: "cluster",
