@@ -4089,12 +4089,13 @@ body {
    onto the search's row, and the phone tier gives the search a full-width row.
    ================================================================ */
 
-/* Phone: the search spans its own row under the topbar, the toolbar follows.
-   The topbar's controls move into the search pill and the sidebar (see
-   AppShell), so the floating status cluster is not used here. */
+/* Phone: the search spans its own row at the top of the map — nothing sits
+   above it, since the topbar's controls move into the pill and the drawer
+   (see AppShell) and the floating status cluster is hidden. The toolbar and
+   the add-point menu keep their base offsets, which already clear that row. */
 @media (max-width: 600px) {
   .content-search {
-    top: calc(var(--ed-float-inset) + 44px);
+    top: var(--ed-float-inset);
     left: var(--ed-float-inset);
     right: var(--ed-float-inset);
   }
@@ -4102,14 +4103,8 @@ body {
     flex: 1;
     width: auto;
   }
-  .ed-toolbar {
-    top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
-  }
-  .ed-addmenu {
-    top: calc(var(--ed-float-gap) + var(--ed-row) * 2 + 60px);
-  }
   .ed-panel {
-    top: calc(var(--ed-float-gap) + var(--ed-row) * 3);
+    top: calc(var(--ed-float-gap) + var(--ed-row) * 2);
   }
   .ed-topright {
     display: none;
