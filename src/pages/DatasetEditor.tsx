@@ -3405,6 +3405,16 @@ export default function DatasetEditor() {
             </div>
           )}
 
+          {/* ---- Drawing hint: the line tool needs a finishing gesture, and
+               nothing else on screen says so (ruas_jalan is the only line
+               dataset, so this is the one place users meet it) ---- */}
+          {activeTool === "draw" && !isPoint && !formOpen && (
+            <div className="ed-draw-hint">
+              Klik peta untuk menambah titik · <b>klik ganda</b> atau{" "}
+              <b>Enter</b> untuk selesai
+            </div>
+          )}
+
           {/* ---- Load failure: shown instead of the empty state so a failed
                fetch is never mistaken for a dataset with no rows ---- */}
           {loadError && !initialLoading && (
