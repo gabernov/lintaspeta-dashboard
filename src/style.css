@@ -2,6 +2,8 @@
 :root[data-theme="dark"] {
   --bg: #0f172a;
   --bg-soft: #1e293b;
+  --shell-bg: #0f172a;
+  --shell-inset: 8px;
   --border: #334155;
   --text: #e2e8f0;
   --text-muted: #94a3b8;
@@ -62,6 +64,8 @@
 :root[data-theme="light"] {
   --bg: #f1f5f9;
   --bg-soft: #ffffff;
+  --shell-bg: #ffffff;
+  --shell-inset: 8px;
   --border: #cbd5e1;
   --text: #0f172a;
   --text-muted: #64748b;
@@ -242,6 +246,7 @@ body {
   display: flex;
   height: 100%;
   width: 100%;
+  background: var(--shell-bg);
 }
 .sidebar {
   width: 248px;
@@ -395,19 +400,29 @@ body {
   color: var(--text-muted);
   font-size: 12px;
 }
+/* The content is an inset panel on the shell surface: rounded, bordered, flush
+   against the sidebar (no left margin) — the shadcn "sidebar inset" look. The
+   shell colour matches the sidebar, so the sidebar no longer reads as a bright
+   slab beside a grey field. */
 .content {
   overflow: hidden;
   position: relative;
   flex: 1;
   min-width: 0;
+  margin: var(--shell-inset) var(--shell-inset) var(--shell-inset) 0;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-/* Non-editor pages scroll inside a padded container */
+/* Non-editor pages scroll inside a padded container. The top padding clears the
+   floating topbar/pill, which overlays the top of the content panel. */
 .page,
 .home {
   height: 100%;
   overflow-y: auto;
-  padding: 24px 28px;
+  padding: 60px 28px 24px;
 }
 
 /* ---------- Pages ---------- */
@@ -685,19 +700,15 @@ body {
   text-align: center;
 }
 
-/* Map — a rounded card on a deliberately contrasting backdrop so its edge can
-   never blend into the basemap. No ring/outline: the backdrop colour does the
-   separation (the canvas keeps its focus behaviour for arrow-key panning). */
+/* Map — a rounded card sitting on the content panel, separated from any basemap
+   by its own elevation (a soft shadow) rather than by a backdrop colour, so its
+   edge never blends. The canvas keeps its focus behaviour for arrow-key panning. */
 :root {
-  --map-backdrop: #1e293b;
   --ed-map-inset: 8px;
   --ed-map-radius: 16px;
   --ed-float-gap: 12px;
   --ed-float-inset: calc(var(--ed-map-inset) + var(--ed-float-gap));
   --ed-row: 52px;
-}
-:root[data-theme="light"] {
-  --map-backdrop: #cbd5e1;
 }
 .ed-body {
   position: relative;
@@ -705,7 +716,6 @@ body {
   width: 100%;
   padding: var(--ed-map-inset);
   box-sizing: border-box;
-  background: var(--map-backdrop);
 }
 .ed-map-wrap {
   position: relative;
@@ -713,6 +723,9 @@ body {
   height: 100%;
   border-radius: var(--ed-map-radius);
   overflow: hidden;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.14),
+    0 10px 28px rgba(15, 23, 42, 0.1);
 }
 .ed-map-wrap canvas:focus,
 .ed-map-wrap canvas:focus-visible,
@@ -1601,9 +1614,9 @@ body {
 }
 .content-search {
   position: fixed;
-  top: var(--ed-float-inset);
+  top: calc(var(--shell-inset) + var(--ed-float-inset));
   left: auto;
-  right: var(--ed-float-inset);
+  right: calc(var(--shell-inset) + var(--ed-float-inset));
   z-index: 40;
   display: flex;
   min-width: 0;
@@ -4117,9 +4130,9 @@ body {
    the add-point menu keep their base offsets, which already clear that row. */
 @media (max-width: 600px) {
   .content-search {
-    top: var(--ed-float-inset);
-    left: var(--ed-float-inset);
-    right: var(--ed-float-inset);
+    top: calc(var(--shell-inset) + var(--ed-float-inset));
+    left: calc(var(--shell-inset) + var(--ed-float-inset));
+    right: calc(var(--shell-inset) + var(--ed-float-inset));
   }
   .ed-search {
     flex: 1;
@@ -4130,6 +4143,10 @@ body {
   }
   .ed-topright {
     display: none;
+  }
+  .page,
+  .home {
+    padding-top: 72px;
   }
 }
 
