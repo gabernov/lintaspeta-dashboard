@@ -441,6 +441,9 @@ export default function DatasetEditor() {
     return localStorage.getItem(`autoflag_${datasetId}`) === "true";
   });
   const [initialLoading, setInitialLoading] = useState(true);
+  /** Set when the feature fetch fails. Without it a failed load looks exactly
+   *  like an empty dataset ("Belum ada data"), which hides the real problem. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Cluster mode OFF by default — users prefer seeing every point; the
   // toolbox button lets super_admin/editor turn native clustering on.
   const [clusterMode, setClusterMode] = useState(false);
@@ -655,12 +658,14 @@ export default function DatasetEditor() {
 
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
+    setLoadError(null);
     const { data, error } = await supabase.rpc("draft_features_geojson", {
       p_dataset: datasetId,
       p_light: true,
     });
     if (error) {
       console.error("fetch features:", error.message);
+      setLoadError(error.message);
       setInitialLoading(false);
       return;
     }
@@ -3223,8 +3228,28 @@ export default function DatasetEditor() {
             </div>
           )}
 
+          {/* ---- Load failure: shown instead of the empty state so a failed
+               fetch is never mistaken for a dataset with no rows ---- */}
+          {loadError && !initialLoading && (
+            <div className="ed-empty-state">
+              <div className="ed-empty-state-card">
+                <h3 className="ed-empty-state-title">Gagal memuat data</h3>
+                <p className="ed-empty-state-text">{loadError}</p>
+                <button
+                  className="ed-selection-btn"
+                  onClick={() => {
+                    setInitialLoading(true);
+                    void refreshFeatures();
+                  }}
+                >
+                  Coba lagi
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ---- Empty state ---- */}
-          {features.features.length === 0 && !initialLoading && (
+          {!loadError && features.features.length === 0 && !initialLoading && (
             <div className="ed-empty-state">
               <div className="ed-empty-state-card">
                 <div className="ed-empty-state-icon">
