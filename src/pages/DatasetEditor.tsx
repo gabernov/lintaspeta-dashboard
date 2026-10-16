@@ -690,17 +690,33 @@ export default function DatasetEditor() {
   const refreshFeatures = useCallback(async () => {
     if (!datasetId) return;
     setLoadError(null);
-    const { data, error } = await supabase.rpc("draft_features_geojson", {
-      p_dataset: datasetId,
-      p_light: true,
-    });
-    if (error) {
-      console.error("fetch features:", error.message);
-      setLoadError(error.message);
-      setInitialLoading(false);
-      return;
+    // Loaded in pages: a single call returns the whole dataset (apj/sekolah are
+    // ~9 MB / 30k+ rows) and that one statement can exceed the authenticated
+    // role's 8 s statement_timeout, which showed up as an empty map.
+    const PAGE = 4000;
+    const all: Feature[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < 60; page++) {
+      const res = await supabase.rpc("draft_features_geojson", {
+        p_dataset: datasetId,
+        p_light: true,
+        p_limit: PAGE,
+        p_after: after,
+      });
+      if (res.error) {
+        console.error("fetch features:", res.error.message);
+        setLoadError(res.error.message);
+        setInitialLoading(false);
+        return;
+      }
+      const feats: Feature[] =
+        (res.data as FeatureCollection | null)?.features ?? [];
+      all.push(...feats);
+      if (feats.length < PAGE) break;
+      after = String(feats[feats.length - 1]?.id ?? "");
+      if (!after) break;
     }
-    const fc = data as FeatureCollection;
+    const fc: FeatureCollection = { type: "FeatureCollection", features: all };
     setFeatures(fc);
     featuresRef.current = fc;
     setInitialLoading(false);
@@ -1508,36 +1524,47 @@ export default function DatasetEditor() {
           }
           applyRuasColorsRef.current();
         } else {
-          void supabase
-            .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
-            .then(({ data }) => {
-              if (!data) return;
-              roadsBgRef.current = data as FeatureCollection;
-              roadSnapRef.current = buildRoadSnapIndex(data as FeatureCollection);
-              setSharedRoads(data as FeatureCollection);
-              const fc = data as FeatureCollection;
-              setRoadList(
-                fc.features
-                  .map((f) => {
-                    const p = (f.properties ?? {}) as Record<string, unknown>;
-                    return {
-                      id: String(p.id_ruas_jalan ?? p._source_id ?? ""),
-                      nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
-                      kode: String(p.kode_number ?? ""),
-                      uptd: String(p.unit_kerja_kode ?? ""),
-                    };
-                  })
-                  .filter((r) => r.id)
-                  .sort((a, b) => a.nama.localeCompare(b.nama, "id"))
-              );
-              const src = map.getSource("roads-bg");
-              if (src && "setData" in src) {
-                (src as maplibregl.GeoJSONSource).setData(
-                  data as FeatureCollection
+          const loadRoads = (attempt: number) => {
+            void supabase
+              .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
+              .then(({ data, error }) => {
+                if (error || !data) {
+                  // The network is ~9 MB in one response, so a cold database can
+                  // blow the statement timeout; retry once before leaving the
+                  // reference layer empty.
+                  if (attempt < 2) {
+                    window.setTimeout(() => loadRoads(attempt + 1), 1500);
+                  }
+                  return;
+                }
+                roadsBgRef.current = data as FeatureCollection;
+                roadSnapRef.current = buildRoadSnapIndex(data as FeatureCollection);
+                setSharedRoads(data as FeatureCollection);
+                const fc = data as FeatureCollection;
+                setRoadList(
+                  fc.features
+                    .map((f) => {
+                      const p = (f.properties ?? {}) as Record<string, unknown>;
+                      return {
+                        id: String(p.id_ruas_jalan ?? p._source_id ?? ""),
+                        nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
+                        kode: String(p.kode_number ?? ""),
+                        uptd: String(p.unit_kerja_kode ?? ""),
+                      };
+                    })
+                    .filter((r) => r.id)
+                    .sort((a, b) => a.nama.localeCompare(b.nama, "id"))
                 );
-              }
-              applyRuasColorsRef.current();
-            });
+                const src = map.getSource("roads-bg");
+                if (src && "setData" in src) {
+                  (src as maplibregl.GeoJSONSource).setData(
+                    data as FeatureCollection
+                  );
+                }
+                applyRuasColorsRef.current();
+              });
+          };
+          loadRoads(0);
         }
         if (datasetId === "rambu") {
           supabase
