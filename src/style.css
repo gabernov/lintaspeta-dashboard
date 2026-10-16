@@ -55,6 +55,7 @@
   --badge-purple-bg: rgba(168, 85, 247, 0.2);
   --badge-purple-fg: #c4b5fd;
   --sidebar-bg: linear-gradient(180deg, #0b1426 0%, #0f172a 100%);
+  --sidebar-solid: #0f172a;
   --dist-hover-1: #1a2634;
   --dist-total-1: #1b2740;
   --dist-uptd-1: #1c2838;
@@ -116,6 +117,7 @@
   --badge-purple-bg: rgba(168, 85, 247, 0.14);
   --badge-purple-fg: #7e22ce;
   --sidebar-bg: var(--bg-soft);
+  --sidebar-solid: var(--bg-soft);
   --dist-hover-1: #e8edf4;
   --dist-total-1: #eef4ff;
   --dist-uptd-1: #eef2f7;
@@ -2293,7 +2295,7 @@ body {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 0 2px var(--bg-soft);
+  box-shadow: 0 0 0 2px var(--sidebar-solid);
 }
 
 .sidebar-footer {
@@ -2302,6 +2304,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  align-items: stretch;
 }
 .sidebar-user {
   display: flex;
