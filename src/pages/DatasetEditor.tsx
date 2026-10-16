@@ -2822,9 +2822,10 @@ export default function DatasetEditor() {
       canToggleWindow: isSuperAdmin,
       autoPublishLabel: chromeAutoLabel,
       autoPublishActive: chromeAutoActive,
+      publishAvailable: !!publishBtn,
       publishDisabled: chromePublishDisabled,
       publishTitle: chromePublishTitle,
-      publishBusy: saving,
+      publishBusy,
       actions: chromeActions,
     });
   }, [
@@ -2833,9 +2834,10 @@ export default function DatasetEditor() {
     isSuperAdmin,
     chromeAutoLabel,
     chromeAutoActive,
+    publishBtn,
     chromePublishDisabled,
     chromePublishTitle,
-    saving,
+    publishBusy,
     chromeActions,
   ]);
 

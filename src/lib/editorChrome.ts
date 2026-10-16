@@ -22,6 +22,7 @@ export type EditorChrome = {
   canToggleWindow: boolean;
   autoPublishLabel: string | null;
   autoPublishActive: boolean;
+  publishAvailable: boolean;
   publishDisabled: boolean;
   publishTitle: string;
   publishBusy: boolean;
@@ -41,6 +42,7 @@ const EMPTY: EditorChrome = {
   canToggleWindow: false,
   autoPublishLabel: null,
   autoPublishActive: false,
+  publishAvailable: false,
   publishDisabled: false,
   publishTitle: "",
   publishBusy: false,

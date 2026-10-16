@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { DATASETS } from "../lib/datasets";
@@ -31,6 +31,11 @@ export default function AppShell() {
     () => window.matchMedia("(max-width: 600px)").matches
   );
   const chrome = useEditorChrome();
+  const location = useLocation();
+  // The pill hosts the sidebar toggle only where the search actually renders
+  // (map routes); elsewhere the toggle must stay in the topbar or the drawer
+  // would be unreachable on phones.
+  const toggleLivesInPill = isCompact && location.pathname.includes("/dataset/");
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 820px)");
@@ -251,16 +256,16 @@ export default function AppShell() {
 
       <main className="content">
         <div className="content-topbar">
-          {!isCompact && sidebarToggleButton}
+          {!toggleLivesInPill && sidebarToggleButton}
           <div className="content-search">
             <EditorSearch
               leading={
-                isCompact ? (
+                toggleLivesInPill ? (
                   <span className="ed-search-lead">{sidebarToggleButton}</span>
                 ) : undefined
               }
               trailing={
-                isCompact && chrome.mounted ? (
+                toggleLivesInPill && chrome.mounted && chrome.publishAvailable ? (
                   <button
                     type="button"
                     className="ed-publish ed-search-trail"
