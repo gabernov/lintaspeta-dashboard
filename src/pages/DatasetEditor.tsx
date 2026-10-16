@@ -220,8 +220,7 @@ function sampleVertices(
 /* ------------------------------------------------------------------ */
 /*  Point layer stack (clusters + labels + points) shared by onLoad    */
 /*  and the cluster toggle so the source can be re-created cleanly.    */
-/* ------------------------------------------------------------------ */
-function addPointDraftLayers(
+/* ------------------------------------------------------------------ */function addPointDraftLayers(
   map: maplibregl.Map,
   color: string,
   withJenisIcons: boolean
@@ -364,6 +363,10 @@ function addPointDraftLayers(
   });
 }
 
+/** Roads hidden by the user persist across reloads; the reference network is
+ *  shared by every dataset, so a single key covers all of them. */
+const HIDDEN_ROADS_KEY = "ed_hidden_roads";
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -451,7 +454,16 @@ export default function DatasetEditor() {
   const [roadInfo, setRoadInfo] = useState<Feature | null>(null);
   const [activeRoadUPTD, setActiveRoadUPTD] = useState<string[]>(() => [...ROAD_UPTD]);
   const roadUPTDRef = useRef<string[]>([...ROAD_UPTD]);
-  const [hiddenRoads, setHiddenRoads] = useState<string[]>([]);
+  const [hiddenRoads, setHiddenRoads] = useState<string[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(
+        localStorage.getItem(HIDDEN_ROADS_KEY) ?? "[]"
+      );
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  });
   const hiddenRoadsRef = useRef<string[]>([]);
   const selectedRoadIdsRef = useRef<string[]>([]);
   const selectedIdsRef = useRef<string[]>([]);
@@ -798,6 +810,11 @@ export default function DatasetEditor() {
   useEffect(() => {
     hiddenRoadsRef.current = hiddenRoads;
     applyRoadStyle();
+    try {
+      localStorage.setItem(HIDDEN_ROADS_KEY, JSON.stringify(hiddenRoads));
+    } catch {
+      // Storage blocked or full: the in-memory list still applies this session.
+    }
   }, [hiddenRoads, applyRoadStyle]);
 
   const handleSave = useCallback(
@@ -1367,35 +1384,48 @@ export default function DatasetEditor() {
             "line-opacity": 1,
           },
         });
-        void supabase
-          .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
-          .then(({ data }) => {
-            if (!data) return;
-            roadsBgRef.current = data as FeatureCollection;
-            setSharedRoads(data as FeatureCollection);
-            const fc = data as FeatureCollection;
-            setRoadList(
-              fc.features
-                .map((f) => {
-                  const p = (f.properties ?? {}) as Record<string, unknown>;
-                  return {
-                    id: String(p.id_ruas_jalan ?? p._source_id ?? ""),
-                    nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
-                    kode: String(p.kode_number ?? ""),
-                    uptd: String(p.unit_kerja_kode ?? ""),
-                  };
-                })
-                .filter((r) => r.id)
-                .sort((a, b) => a.nama.localeCompare(b.nama, "id"))
-            );
-            const src = map.getSource("roads-bg");
-            if (src && "setData" in src) {
-              (src as maplibregl.GeoJSONSource).setData(
-                data as FeatureCollection
+        const cachedRoads = roadsBgRef.current;
+        if (cachedRoads) {
+          // A style switch (basemap or theme) wipes this source. Re-apply the
+          // network we already hold instead of re-fetching it: that request is
+          // ~9 MB / ~2 s, so the map would sit road-less meanwhile and stay
+          // that way if the request failed.
+          const src = map.getSource("roads-bg");
+          if (src && "setData" in src) {
+            (src as maplibregl.GeoJSONSource).setData(cachedRoads);
+          }
+          applyRuasColorsRef.current();
+        } else {
+          void supabase
+            .rpc("published_features_geojson", { p_dataset: "ruas_jalan" })
+            .then(({ data }) => {
+              if (!data) return;
+              roadsBgRef.current = data as FeatureCollection;
+              setSharedRoads(data as FeatureCollection);
+              const fc = data as FeatureCollection;
+              setRoadList(
+                fc.features
+                  .map((f) => {
+                    const p = (f.properties ?? {}) as Record<string, unknown>;
+                    return {
+                      id: String(p.id_ruas_jalan ?? p._source_id ?? ""),
+                      nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
+                      kode: String(p.kode_number ?? ""),
+                      uptd: String(p.unit_kerja_kode ?? ""),
+                    };
+                  })
+                  .filter((r) => r.id)
+                  .sort((a, b) => a.nama.localeCompare(b.nama, "id"))
               );
-            }
-            applyRuasColorsRef.current();
-          });
+              const src = map.getSource("roads-bg");
+              if (src && "setData" in src) {
+                (src as maplibregl.GeoJSONSource).setData(
+                  data as FeatureCollection
+                );
+              }
+              applyRuasColorsRef.current();
+            });
+        }
         if (datasetId === "rambu") {
           supabase
             .from("rambu_draft")
