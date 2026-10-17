@@ -315,7 +315,6 @@ body {
 }
 .sidebar {
   background: var(--bg-soft);
-  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -2207,9 +2206,10 @@ body {
 }
 
 /* ---------- Sidebar ---------- */
+/* No border-right: the content panel's own rounded border is the only divider,
+   otherwise a straight full-height line runs beside it. */
 .sidebar {
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-soft-4);
   display: flex;
   flex-direction: column;
   padding: 16px 12px 14px;
