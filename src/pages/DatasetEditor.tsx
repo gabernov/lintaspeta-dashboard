@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase";
 import { getDataset } from "../lib/datasets";
 import { ED_BASEMAP_EVENT, basemapForTheme, basemapStyleSpec, getBasemap } from "../lib/basemaps";
 import { resetEditorChrome, setEditorChrome } from "../lib/editorChrome";
+import { ensureXLSX, exportRowsToXLSX } from "../lib/xlsxExport";
 import { fetchOsmGeometry, onSearchSelection, setSharedRoads } from "../lib/editorSearch";
 import {
   buildRoadSnapIndex,
@@ -381,6 +382,21 @@ const hiddenRoadsKey = (datasetId: string) => `ed_hidden_roads_${datasetId}`;
 
 /** Bar colours for the per-facet breakdowns (jenis / kelas / jenjang …). */
 const FACET_COLORS = ["#2563eb", "#7c3aed", "#0d9488", "#f59e0b", "#e11d48", "#64748b"];
+
+/** Property keys that may hold a kab/kota, checked in order per dataset. */
+const KAB_KEYS = ["kab_kota", "kabkota", "Kabupaten/Kota", "KABUPATEN", "kabupaten"];
+const KABKOTA_OVERRIDES: Record<string, string> = { bandungbarat: "Bandung Barat" };
+
+/** "kab_sukabumi" → "Kab. Sukabumi", "kota_bandung" → "Kota Bandung". */
+function kabkotaLabel(code: string): string {
+  const m = code.match(/^(kab|kota)[_-](.+)$/i);
+  if (!m) return code;
+  const prefix = m[1].toLowerCase() === "kab" ? "Kab." : "Kota";
+  const raw = m[2].toLowerCase();
+  const name =
+    KABKOTA_OVERRIDES[raw] ?? raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return `${prefix} ${name}`;
+}
 
 /* ================================================================== */
 export default function DatasetEditor() {
@@ -1554,6 +1570,7 @@ export default function DatasetEditor() {
                         nama: String(p.nama ?? "") || String(p.kode_number ?? ""),
                         kode: String(p.kode_number ?? ""),
                         uptd: String(p.unit_kerja_kode ?? ""),
+                        kab: String(p.kab_kota ?? p.KABUPATEN ?? ""),
                       };
                     })
                     .filter((r) => r.id)
@@ -3250,12 +3267,31 @@ export default function DatasetEditor() {
   const stats = useMemo(() => {
     const facetFields = (meta?.formFields ?? []).filter((f) => f.type === "select");
     const regionCounts = new Map<string, number>();
+    const kabCounts = new Map<string, number>();
     const facetCounts = facetFields.map(() => new Map<string, number>());
+
+    const roadKab = new Map<string, string>();
+    for (const road of roadList) {
+      if (road.kode && road.kab) roadKab.set(road.kode, road.kab);
+    }
 
     for (const f of features.features) {
       const p = (f.properties ?? {}) as GeoProps;
+      const raw = p as Record<string, unknown>;
       const region = String(p._region ?? "").trim();
       if (region) regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1);
+
+      let kab = "";
+      for (const key of KAB_KEYS) {
+        const v = String(raw[key] ?? "").trim();
+        if (v) {
+          kab = v;
+          break;
+        }
+      }
+      if (!kab && p.kode_ruas) kab = roadKab.get(String(p.kode_ruas).trim()) ?? "";
+      if (kab) kabCounts.set(kab, (kabCounts.get(kab) ?? 0) + 1);
+
       facetFields.forEach((field, i) => {
         const v = String(p[field.key] ?? "").trim();
         if (v) facetCounts[i].set(v, (facetCounts[i].get(v) ?? 0) + 1);
@@ -3271,14 +3307,17 @@ export default function DatasetEditor() {
         .sort((a, b) => b[1] - a[1])
         .map(([k, n], i) => ({ key: k, label: label(k), count: n, color: color(k, i) }));
 
+    const regions = toBars(
+      regionCounts,
+      (k) => k.replace("UPTD-", "UPTD "),
+      (k) => UPTD_COLORS[k] ?? meta?.defaultColor ?? "#64748b"
+    );
+
     return {
       total: features.features.length,
       regionLabel: meta?.regionLabel ?? "Wilayah",
-      regions: toBars(
-        regionCounts,
-        (k) => k.replace("UPTD-", "UPTD "),
-        (k) => UPTD_COLORS[k] ?? meta?.defaultColor ?? "#64748b"
-      ),
+      regions,
+      kabkota: meta?.regionLabel === "Kabupaten" ? [] : toBars(kabCounts, kabkotaLabel, () => "#60a5fa"),
       facets: facetFields.map((field, i) => ({
         key: field.key,
         label: field.label,
@@ -3289,7 +3328,23 @@ export default function DatasetEditor() {
         ),
       })),
     };
-  }, [features, meta]);
+  }, [features, meta, roadList]);
+
+  const handleExportXLSX = useCallback(async () => {
+    if (!meta || features.features.length === 0) return;
+    const ready = await ensureXLSX();
+    if (!ready) {
+      showToast("Gagal memuat library XLSX", false);
+      return;
+    }
+    const rows = features.features.map((f) => ({
+      ...((f.properties ?? {}) as GeoProps),
+      id: f.id,
+    }));
+    const stamp = new Date().toISOString().slice(0, 10);
+    const written = exportRowsToXLSX(rows, `${datasetId}-${stamp}.xlsx`, meta.label);
+    showToast(`${written.toLocaleString()} fitur diunduh sebagai XLSX`, true);
+  }, [meta, features, datasetId, showToast]);
 
   /* ================================================================ */
   /*  RENDER                                                          */
@@ -3417,6 +3472,8 @@ export default function DatasetEditor() {
             defaultColor={meta.defaultColor}
             showRoads={datasetId !== "ruas_jalan"}
             stats={stats}
+            onExport={handleExportXLSX}
+            exportCount={stats.total}
             open={layersOpen}
             onToggleOpen={() => setLayersOpen((v) => !v)}
             featuresVisible={featuresVisible}

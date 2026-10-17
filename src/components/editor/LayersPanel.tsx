@@ -7,6 +7,7 @@ export type EditorStats = {
   total: number;
   regionLabel: string;
   regions: StatsBar[];
+  kabkota: StatsBar[];
   facets: { key: string; label: string; bars: StatsBar[] }[];
 };
 
@@ -29,6 +30,8 @@ type Props = {
   onSetManyRoads: (ids: string[], visible: boolean) => void;
   onShowAllRoads: () => void;
   stats: EditorStats;
+  onExport: () => void;
+  exportCount: number;
 };
 
 /** One bar breakdown (per UPTD, per jenis, …), mirroring the public map's panel. */
@@ -114,6 +117,8 @@ export default function LayersPanel({
   onSetManyRoads,
   onShowAllRoads,
   stats,
+  onExport,
+  exportCount,
 }: Props) {
   const [expandedUPTD, setExpandedUPTD] = useState<string | null>(null);
   const [roadQuery, setRoadQuery] = useState("");
@@ -176,9 +181,24 @@ export default function LayersPanel({
             </div>
 
             <BarGroup title={`Per ${stats.regionLabel}`} bars={stats.regions} />
+            {stats.kabkota.length > 0 && (
+              <>
+                <div className="ed-stats-subhead">Sebaran Wilayah</div>
+                <BarGroup title="Per Kota / Kabupaten" bars={stats.kabkota} />
+              </>
+            )}
             {stats.facets.map((facet) => (
               <BarGroup key={facet.key} title={`Per ${facet.label}`} bars={facet.bars} />
             ))}
+
+            <button
+              type="button"
+              className="ed-stats-export"
+              onClick={onExport}
+              disabled={exportCount === 0}
+            >
+              ⬇ Unduh XLSX ({exportCount.toLocaleString()})
+            </button>
           </Section>
 
           <Section

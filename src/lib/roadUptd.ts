@@ -9,4 +9,4 @@ export const UPTD_COLORS: Record<string, string> = {
 
 export const ROAD_UPTD_FALLBACK = "#94A3B8";
 
-export type RoadItem = { id: string; nama: string; kode: string; uptd: string };
+export type RoadItem = { id: string; nama: string; kode: string; uptd: string; kab?: string };
