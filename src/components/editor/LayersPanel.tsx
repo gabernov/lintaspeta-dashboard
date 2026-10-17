@@ -2,6 +2,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ROAD_UPTD, UPTD_COLORS, type RoadItem } from "../../lib/roadUptd";
 import { BASEMAPS, ED_BASEMAP_EVENT, getBasemap } from "../../lib/basemaps";
 
+type StatsBar = { key: string; label: string; count: number; color: string };
+export type EditorStats = {
+  total: number;
+  regionLabel: string;
+  regions: StatsBar[];
+  facets: { key: string; label: string; bars: StatsBar[] }[];
+};
+
 type Props = {
   label: string;
   isPoint: boolean;
@@ -20,9 +28,42 @@ type Props = {
   onToggleRoad: (id: string) => void;
   onSetManyRoads: (ids: string[], visible: boolean) => void;
   onShowAllRoads: () => void;
-  featureCount: number;
-  featureUptdCounts: Record<string, number>;
+  stats: EditorStats;
 };
+
+/** One bar breakdown (per UPTD, per jenis, …), mirroring the public map's panel. */
+function BarGroup({ title, bars }: { title: string; bars: StatsBar[] }) {
+  if (bars.length === 0) return null;
+  const max = Math.max(1, ...bars.map((b) => b.count));
+  const total = bars.reduce((sum, b) => sum + b.count, 0);
+  return (
+    <div className="ed-stats-bars">
+      <div className="ed-stats-bars-title">{title}</div>
+      {bars.map((b) => (
+        <div key={b.key}>
+          <div className="ed-stats-bar-head">
+            <span className="ed-stats-bar-label">
+              <span className="ed-stats-bar-dot" style={{ background: b.color }} />
+              {b.label}
+            </span>
+            <span>
+              {b.count.toLocaleString()}
+              <em className="ed-stats-bar-pct">
+                {total ? Math.round((b.count / total) * 100) : 0}%
+              </em>
+            </span>
+          </div>
+          <div className="ed-stats-bar-track">
+            <div
+              className="ed-stats-bar-fill"
+              style={{ width: `${Math.round((b.count / max) * 100)}%`, background: b.color }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** Collapsible section of the layers dock: a header button plus its body. */
 function Section({
@@ -72,8 +113,7 @@ export default function LayersPanel({
   onToggleRoad,
   onSetManyRoads,
   onShowAllRoads,
-  featureCount,
-  featureUptdCounts,
+  stats,
 }: Props) {
   const [expandedUPTD, setExpandedUPTD] = useState<string | null>(null);
   const [roadQuery, setRoadQuery] = useState("");
@@ -118,7 +158,7 @@ export default function LayersPanel({
           <Section title="Statistik" open={sections.stats} onToggle={() => toggleSection("stats")}>
             <div className="ed-stats-hero">
               <div className="ed-stats-hero-label">Total Fitur</div>
-              <div className="ed-stats-hero-value">{featureCount.toLocaleString()}</div>
+              <div className="ed-stats-hero-value">{stats.total.toLocaleString()}</div>
             </div>
             <div className="ed-stats-chips">
               <div className="ed-stats-chip">
@@ -130,33 +170,15 @@ export default function LayersPanel({
                 <span className="ed-stats-chip-value">{hiddenRoads.length.toLocaleString()}</span>
               </div>
               <div className="ed-stats-chip">
-                <span className="ed-stats-chip-label">UPTD aktif</span>
-                <span className="ed-stats-chip-value">{roadUPTD.length.toLocaleString()}</span>
+                <span className="ed-stats-chip-label">{stats.regionLabel}</span>
+                <span className="ed-stats-chip-value">{stats.regions.length.toLocaleString()}</span>
               </div>
             </div>
-            <div className="ed-stats-bars">
-              {ROAD_UPTD.map((code) => {
-                const n = featureUptdCounts[code] ?? 0;
-                const max = Math.max(1, ...Object.values(featureUptdCounts));
-                return (
-                  <div key={code}>
-                    <div className="ed-stats-bar-head">
-                      <span>{code.replace("UPTD-", "UPTD ")}</span>
-                      <span>{n.toLocaleString()}</span>
-                    </div>
-                    <div className="ed-stats-bar-track">
-                      <div
-                        className="ed-stats-bar-fill"
-                        style={{
-                          width: `${Math.round((n / max) * 100)}%`,
-                          background: UPTD_COLORS[code],
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+
+            <BarGroup title={`Per ${stats.regionLabel}`} bars={stats.regions} />
+            {stats.facets.map((facet) => (
+              <BarGroup key={facet.key} title={`Per ${facet.label}`} bars={facet.bars} />
+            ))}
           </Section>
 
           <Section

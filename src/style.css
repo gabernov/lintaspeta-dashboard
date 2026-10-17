@@ -1366,22 +1366,22 @@ body {
 .ed-layers-btn.on { color: var(--text); border-color: var(--accent-tint-strong); }
 .ed-layers-card {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  top: calc(var(--ed-float-inset) + 44px);
+  bottom: var(--ed-float-inset);
+  left: var(--ed-float-inset);
   width: var(--ed-layers-w);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: calc(var(--ed-float-inset) + 44px) 12px 14px;
+  padding: 14px 12px;
   overflow-y: auto;
   pointer-events: auto;
-  border-radius: 0 var(--ed-map-radius) var(--ed-map-radius) 0;
+  border-radius: var(--ed-map-radius);
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border-right: 1px solid var(--border-soft-3);
-  box-shadow: 12px 0 36px rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border-soft-3);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
 }
 /* The map's own controls are anchored bottom-left, so the scale moves clear of
    the dock while it is open (phones keep the dock over them: it covers the map). */
@@ -1390,7 +1390,7 @@ body {
 }
 @media (min-width: 601px) {
   .ed-map-wrap.layers-open .maplibregl-ctrl-bottom-left {
-    margin-left: var(--ed-layers-w);
+    margin-left: calc(var(--ed-float-inset) + var(--ed-layers-w) + var(--ed-float-gap));
   }
 }
 /* The toggle sits beside the sidebar toggle in the top-left cluster; on phones
@@ -1398,7 +1398,7 @@ body {
 .ed-layers-btn {
   position: absolute;
   top: var(--ed-float-inset);
-  left: calc(var(--ed-float-inset) + 42px);
+  left: calc(var(--ed-float-inset) + 84px);
   pointer-events: auto;
 }
 
@@ -1482,6 +1482,34 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.ed-stats-bars-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.ed-stats-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-stats-bar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ed-stats-bar-pct {
+  margin-left: 6px;
+  font-style: normal;
+  opacity: 0.7;
 }
 .ed-stats-bar-head {
   display: flex;
@@ -3056,11 +3084,11 @@ body {
     bottom: 40px;
     left: 8px;
   }
-  /* The dock covers most of a phone's map and its content clears the search pill
-     and the tool row that float above it. */
+  /* The dock covers most of a phone's map; it starts below the search pill and
+     the tool row that float above it. */
   .ed-layers-card {
     width: min(88vw, var(--ed-layers-w));
-    padding-top: calc(var(--ed-float-inset) + 44px + 8px + var(--ed-row) + 8px);
+    top: calc(var(--ed-float-inset) + 44px + 8px + var(--ed-row) + 8px);
   }
 }
 

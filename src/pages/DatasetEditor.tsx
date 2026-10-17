@@ -379,6 +379,9 @@ function sampleVertices(
  *  must not hide it on the others. */
 const hiddenRoadsKey = (datasetId: string) => `ed_hidden_roads_${datasetId}`;
 
+/** Bar colours for the per-facet breakdowns (jenis / kelas / jenjang …). */
+const FACET_COLORS = ["#2563eb", "#7c3aed", "#0d9488", "#f59e0b", "#e11d48", "#64748b"];
+
 /* ================================================================== */
 export default function DatasetEditor() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -3241,16 +3244,52 @@ export default function DatasetEditor() {
 
   useEffect(() => () => resetEditorChrome(), []);
 
-  /* ---- stats shown at the top of the layers dock ---- */
-  const featureStats = useMemo(() => {
-    const counts: Record<string, number> = {};
+  /* ---- stats shown at the top of the layers dock: totals plus a breakdown per
+     UPTD and per select field (jenis / kelas / jenjang …), so the panel mirrors
+     the public map's and adapts to whichever dataset is open. ---- */
+  const stats = useMemo(() => {
+    const facetFields = (meta?.formFields ?? []).filter((f) => f.type === "select");
+    const regionCounts = new Map<string, number>();
+    const facetCounts = facetFields.map(() => new Map<string, number>());
+
     for (const f of features.features) {
-      const region = String((f.properties as GeoProps | null)?._region ?? "");
-      if (!region) continue;
-      counts[region] = (counts[region] ?? 0) + 1;
+      const p = (f.properties ?? {}) as GeoProps;
+      const region = String(p._region ?? "").trim();
+      if (region) regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1);
+      facetFields.forEach((field, i) => {
+        const v = String(p[field.key] ?? "").trim();
+        if (v) facetCounts[i].set(v, (facetCounts[i].get(v) ?? 0) + 1);
+      });
     }
-    return { total: features.features.length, counts };
-  }, [features]);
+
+    const toBars = (
+      counts: Map<string, number>,
+      label: (k: string) => string,
+      color: (k: string, i: number) => string
+    ) =>
+      [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, n], i) => ({ key: k, label: label(k), count: n, color: color(k, i) }));
+
+    return {
+      total: features.features.length,
+      regionLabel: meta?.regionLabel ?? "Wilayah",
+      regions: toBars(
+        regionCounts,
+        (k) => k.replace("UPTD-", "UPTD "),
+        (k) => UPTD_COLORS[k] ?? meta?.defaultColor ?? "#64748b"
+      ),
+      facets: facetFields.map((field, i) => ({
+        key: field.key,
+        label: field.label,
+        bars: toBars(
+          facetCounts[i],
+          (k) => (field.key === "jenis" ? jenisLabel(k) : k.replace(/_/g, " ")),
+          (_k, idx) => FACET_COLORS[idx % FACET_COLORS.length]
+        ),
+      })),
+    };
+  }, [features, meta]);
 
   /* ================================================================ */
   /*  RENDER                                                          */
@@ -3377,8 +3416,7 @@ export default function DatasetEditor() {
             isPoint={isPoint}
             defaultColor={meta.defaultColor}
             showRoads={datasetId !== "ruas_jalan"}
-            featureCount={featureStats.total}
-            featureUptdCounts={featureStats.counts}
+            stats={stats}
             open={layersOpen}
             onToggleOpen={() => setLayersOpen((v) => !v)}
             featuresVisible={featuresVisible}
