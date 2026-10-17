@@ -3241,6 +3241,17 @@ export default function DatasetEditor() {
 
   useEffect(() => () => resetEditorChrome(), []);
 
+  /* ---- stats shown at the top of the layers dock ---- */
+  const featureStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of features.features) {
+      const region = String((f.properties as GeoProps | null)?._region ?? "");
+      if (!region) continue;
+      counts[region] = (counts[region] ?? 0) + 1;
+    }
+    return { total: features.features.length, counts };
+  }, [features]);
+
   /* ================================================================ */
   /*  RENDER                                                          */
   /* ================================================================ */
@@ -3254,7 +3265,10 @@ export default function DatasetEditor() {
 
       {/* -------- map + overlays -------- */}
       <div className="ed-body">
-        <div className="ed-map-wrap" ref={mapContainerRef}>
+        <div
+          className={`ed-map-wrap${layersOpen ? " layers-open" : ""}`}
+          ref={mapContainerRef}
+        >
           {/* ---- Tools (top-center) ---- */}
           {(isSuperAdmin || isEditor) && (
             <div className="ed-toolbar" role="toolbar" aria-label="Alat editor">
@@ -3363,6 +3377,8 @@ export default function DatasetEditor() {
             isPoint={isPoint}
             defaultColor={meta.defaultColor}
             showRoads={datasetId !== "ruas_jalan"}
+            featureCount={featureStats.total}
+            featureUptdCounts={featureStats.counts}
             open={layersOpen}
             onToggleOpen={() => setLayersOpen((v) => !v)}
             featuresVisible={featuresVisible}

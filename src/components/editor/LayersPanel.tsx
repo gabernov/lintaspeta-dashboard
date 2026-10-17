@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ROAD_UPTD, UPTD_COLORS, type RoadItem } from "../../lib/roadUptd";
 import { BASEMAPS, ED_BASEMAP_EVENT, getBasemap } from "../../lib/basemaps";
 
@@ -20,7 +20,39 @@ type Props = {
   onToggleRoad: (id: string) => void;
   onSetManyRoads: (ids: string[], visible: boolean) => void;
   onShowAllRoads: () => void;
+  featureCount: number;
+  featureUptdCounts: Record<string, number>;
 };
+
+/** Collapsible section of the layers dock: a header button plus its body. */
+function Section({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ed-layers-section">
+      <button
+        type="button"
+        className="ed-layers-section-head"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span className="ed-layers-title">{title}</span>
+        <span className="ed-layers-chevron" aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 export default function LayersPanel({
   label,
@@ -40,10 +72,15 @@ export default function LayersPanel({
   onToggleRoad,
   onSetManyRoads,
   onShowAllRoads,
+  featureCount,
+  featureUptdCounts,
 }: Props) {
   const [expandedUPTD, setExpandedUPTD] = useState<string | null>(null);
   const [roadQuery, setRoadQuery] = useState("");
   const [basemap, setBasemap] = useState(() => getBasemap(localStorage.getItem("ed_basemap")));
+  const [sections, setSections] = useState({ stats: true, layers: true, basemap: false });
+  const toggleSection = (key: keyof typeof sections) =>
+    setSections((s) => ({ ...s, [key]: !s[key] }));
 
   useEffect(() => {
     const onExternal = (e: Event) => {
@@ -63,9 +100,9 @@ export default function LayersPanel({
   return (
     <div className="ed-layers">
       {open && (
-        <div className="ed-layers-card" role="dialog" aria-label="Tampilkan lapisan">
+        <div className="ed-layers-card" role="dialog" aria-label="Lapisan">
           <div className="ed-layers-head">
-            <div className="ed-layers-title">Tampilkan Lapisan</div>
+            <div className="ed-layers-title">Lapisan</div>
             <button
               type="button"
               className="ed-layers-close"
@@ -77,6 +114,56 @@ export default function LayersPanel({
             </button>
           </div>
           <div className="ed-layers-name">{label}</div>
+
+          <Section title="Statistik" open={sections.stats} onToggle={() => toggleSection("stats")}>
+            <div className="ed-stats-hero">
+              <div className="ed-stats-hero-label">Total Fitur</div>
+              <div className="ed-stats-hero-value">{featureCount.toLocaleString()}</div>
+            </div>
+            <div className="ed-stats-chips">
+              <div className="ed-stats-chip">
+                <span className="ed-stats-chip-label">Ruas</span>
+                <span className="ed-stats-chip-value">{roadList.length.toLocaleString()}</span>
+              </div>
+              <div className="ed-stats-chip">
+                <span className="ed-stats-chip-label">Tersembunyi</span>
+                <span className="ed-stats-chip-value">{hiddenRoads.length.toLocaleString()}</span>
+              </div>
+              <div className="ed-stats-chip">
+                <span className="ed-stats-chip-label">UPTD aktif</span>
+                <span className="ed-stats-chip-value">{roadUPTD.length.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="ed-stats-bars">
+              {ROAD_UPTD.map((code) => {
+                const n = featureUptdCounts[code] ?? 0;
+                const max = Math.max(1, ...Object.values(featureUptdCounts));
+                return (
+                  <div key={code}>
+                    <div className="ed-stats-bar-head">
+                      <span>{code.replace("UPTD-", "UPTD ")}</span>
+                      <span>{n.toLocaleString()}</span>
+                    </div>
+                    <div className="ed-stats-bar-track">
+                      <div
+                        className="ed-stats-bar-fill"
+                        style={{
+                          width: `${Math.round((n / max) * 100)}%`,
+                          background: UPTD_COLORS[code],
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+
+          <Section
+            title="Tampilkan Lapisan"
+            open={sections.layers}
+            onToggle={() => toggleSection("layers")}
+          >
           <button
             type="button"
             className={`ed-layer-row${featuresVisible ? " on" : ""}`}
@@ -193,8 +280,13 @@ export default function LayersPanel({
               </div>
             </>
           )}
+          </Section>
 
-          <div className="ed-layers-title ed-layers-title-gap">Peta dasar</div>
+          <Section
+            title="Peta dasar"
+            open={sections.basemap}
+            onToggle={() => toggleSection("basemap")}
+          >
           {BASEMAPS.map((b) => {
             const on = b.id === basemap.id;
             return (
@@ -211,6 +303,7 @@ export default function LayersPanel({
               </button>
             );
           })}
+          </Section>
         </div>
       )}
 

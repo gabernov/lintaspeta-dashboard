@@ -717,6 +717,7 @@ body {
   --ed-float-gap: 12px;
   --ed-float-inset: calc(var(--ed-map-inset) + var(--ed-float-gap));
   --ed-row: 52px;
+  --ed-layers-w: 300px;
 }
 /* The map fills the content panel: the panel's rounded border and shadow are the
    only frame, so no second rounded edge is inset inside it. */
@@ -1334,15 +1335,14 @@ body {
 }
 
 /* ---- Legend (bottom-left, above scale) ---- */
+/* The layers panel is a full-height dock on the map's left edge. The wrapper
+   spans the map so the panel and its button anchor to the map's edges, and only
+   its children take pointer events, so the map stays draggable. */
 .ed-layers {
   position: absolute;
-  bottom: 46px;
-  left: var(--ed-float-gap);
+  inset: 0;
   z-index: 9;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  pointer-events: none;
 }
 .ed-layers-btn {
   display: flex;
@@ -1365,19 +1365,140 @@ body {
 .ed-layers-btn:hover { color: var(--text); }
 .ed-layers-btn.on { color: var(--text); border-color: var(--accent-tint-strong); }
 .ed-layers-card {
-  width: 262px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--ed-layers-w);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  max-height: min(70vh, 560px);
+  gap: 10px;
+  padding: calc(var(--ed-float-inset) + 44px) 12px 14px;
   overflow-y: auto;
-  border-radius: 12px;
+  pointer-events: auto;
+  border-radius: 0 var(--ed-map-radius) var(--ed-map-radius) 0;
   background: var(--glass-panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid var(--border-soft-3);
+  box-shadow: 12px 0 36px rgba(0, 0, 0, 0.28);
+}
+/* The map's own controls are anchored bottom-left, so the scale moves clear of
+   the dock while it is open (phones keep the dock over them: it covers the map). */
+.ed-map-wrap .maplibregl-ctrl-bottom-left {
+  transition: margin-left 0.2s ease;
+}
+@media (min-width: 601px) {
+  .ed-map-wrap.layers-open .maplibregl-ctrl-bottom-left {
+    margin-left: var(--ed-layers-w);
+  }
+}
+/* The toggle sits beside the sidebar toggle in the top-left cluster; on phones
+   that row is the search pill, so it drops to the bottom-left corner. */
+.ed-layers-btn {
+  position: absolute;
+  top: var(--ed-float-inset);
+  left: calc(var(--ed-float-inset) + 42px);
+  pointer-events: auto;
+}
+
+/* Collapsible sections inside the dock (stats / layers / basemap). */
+.ed-layers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ed-layers-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+.ed-layers-section-head:hover {
+  color: var(--text);
+}
+.ed-layers-chevron {
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+.ed-layers-section-head[aria-expanded="false"] .ed-layers-chevron {
+  transform: rotate(-90deg);
+}
+
+/* Map stats at the top of the dock. */
+.ed-stats-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-tint-strong);
+}
+.ed-stats-hero-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+}
+.ed-stats-hero-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ed-stats-chips {
+  display: flex;
+  gap: 6px;
+}
+.ed-stats-chip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 10px;
   border: 1px solid var(--border-soft-3);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+.ed-stats-chip-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.ed-stats-chip-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ed-stats-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ed-stats-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.ed-stats-bar-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  overflow: hidden;
+}
+.ed-stats-bar-fill {
+  height: 100%;
+  border-radius: 999px;
 }
 .ed-layers-title {
   font-size: 10px;
@@ -2930,9 +3051,16 @@ body {
   .ed-publish {
     padding: 8px 10px;
   }
-  .ed-layers {
+  .ed-layers-btn {
+    top: auto;
     bottom: 40px;
     left: 8px;
+  }
+  /* The dock covers most of a phone's map and its content clears the search pill
+     and the tool row that float above it. */
+  .ed-layers-card {
+    width: min(88vw, var(--ed-layers-w));
+    padding-top: calc(var(--ed-float-inset) + 44px + 8px + var(--ed-row) + 8px);
   }
 }
 
